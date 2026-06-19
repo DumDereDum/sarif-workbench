@@ -1,0 +1,45 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": { "name": "ToolA", "version": "1.0", "rules": [] }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-79",
+          "level": "warning",
+          "message": { "text": "XSS" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/views.py" },
+                "region": { "startLine": 10 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tool": {
+        "driver": { "name": "ToolB", "version": "2.0", "rules": [] }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-22",
+          "level": "error",
+          "message": { "text": "Path traversal" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/files.py" },
+                "region": { "startLine": 55 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

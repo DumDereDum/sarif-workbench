@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# sarif-workbench
+.claude/
+*.swbmeta.json
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Empty root npm artifact
+package-lock.json
+
+# Runtime data (SQLite + local blobs)
+server/data/
+
+# Web build output
+web/dist/
+web/node_modules/
+
+# Docker env overrides
+.env
+
+# Server logs (mounted from Docker container)
+logs/

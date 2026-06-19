@@ -1,0 +1,51 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": { "name": "TestTool", "version": "1.0", "rules": [] }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-476",
+          "level": "warning",
+          "message": { "text": "Null dereference" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/utils.c" },
+                "region": { "startLine": 20 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CWE-476",
+          "level": "warning",
+          "message": { "text": "Null dereference" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/utils.c" },
+                "region": { "startLine": 20 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CWE-476",
+          "level": "warning",
+          "message": { "text": "Null dereference" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/utils.c" },
+                "region": { "startLine": 20 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

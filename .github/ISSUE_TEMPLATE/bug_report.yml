@@ -1,0 +1,44 @@
+name: Bug report
+description: Something is not working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting a bug!
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `swb-cli enrich ...`
+        2. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: swb-cli version or commit
+      placeholder: "0.1.0 / abc1234"
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - swb-cli
+        - server
+        - web UI
+        - docs
+        - CI/CD

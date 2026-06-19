@@ -1,0 +1,73 @@
+# Development — горячая перезагрузка, исходники монтируются напрямую
+# Запуск: docker compose up
+# Остановка: docker compose down
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: uvicorn swb_server.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./server/swb_server:/app/swb_server  # hot reload
+      - server_data:/data
+      - ./logs:/logs
+    environment:
+      DATA_DIR: /data
+      DATABASE_URL: sqlite:////data/swb.db
+      STORAGE_BACKEND: local
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FILE: /logs/server.log
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci --prefer-offline && npm run dev -- --host"
+    volumes:
+      - ./web:/app
+      - web_nm:/app/node_modules          # prevents host node_modules conflict
+    environment:
+      API_TARGET: http://server:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  # ── Optional: Postgres (future migration) ─────────────────────────────────
+  # docker compose --profile postgres up
+  postgres:
+    profiles: [postgres]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: swb
+      POSTGRES_PASSWORD: swb
+      POSTGRES_DB: swb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # ── Optional: MinIO / S3 (future migration) ────────────────────────────────
+  # docker compose --profile s3 up
+  minio:
+    profiles: [s3]
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"  # MinIO Console UI
+
+volumes:
+  server_data:
+  web_nm:
+  pg_data:
+  minio_data:

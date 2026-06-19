@@ -1,0 +1,62 @@
+# Production — собранные образы, nginx, без исходников
+# Запуск: docker compose -f docker-compose.prod.yml up --build -d
+# Или:    make prod
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    volumes:
+      - server_data:/data
+    environment:
+      DATA_DIR: /data
+      DATABASE_URL: sqlite:////data/swb.db
+      STORAGE_BACKEND: local
+    restart: unless-stopped
+    # Не открываем порт наружу — трафик идёт через nginx
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  # ── Optional: Postgres ────────────────────────────────────────────────────
+  # docker compose -f docker-compose.prod.yml --profile postgres up --build -d
+  postgres:
+    profiles: [postgres]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: swb
+      POSTGRES_PASSWORD: swb
+      POSTGRES_DB: swb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ── Optional: MinIO ───────────────────────────────────────────────────────
+  minio:
+    profiles: [s3]
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+
+volumes:
+  server_data:
+  pg_data:
+  minio_data:

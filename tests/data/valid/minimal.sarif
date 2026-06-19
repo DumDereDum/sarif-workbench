@@ -1,0 +1,36 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "CWE-89",
+              "name": "SqlInjection",
+              "fullDescription": { "text": "SQL Injection" },
+              "properties": { "security-severity": "9.1" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-89",
+          "level": "error",
+          "message": { "text": "User input reaches SQL query" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/db.py" },
+                "region": { "startLine": 42, "startColumn": 8 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

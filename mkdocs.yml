@@ -1,0 +1,116 @@
+site_name: SARIF Workbench
+site_description: >-
+  Open-source triage workbench for SAST findings. Browse CodeQL, Semgrep, Svace results,
+  run AI-assisted triage with local LLMs, compare runs, and export PDF reports.
+  Designed for air-gapped and corporate environments.
+site_url: https://dumderdum.github.io/sarif-workbench/
+repo_url: https://github.com/DumDereDum/sarif-workbench
+repo_name: DumDereDum/sarif-workbench
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.instant
+    - search.highlight
+    - search.suggest
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tooltips
+
+extra:
+  alternate:
+    - name: English
+      link: /sarif-workbench/
+      lang: en
+    - name: Русский
+      link: /sarif-workbench/ru/
+      lang: ru
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/DumDereDum/sarif-workbench
+      name: GitHub
+  analytics:
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/thumb-up-outline
+          name: This page was helpful
+          data: 1
+          note: Thanks for your feedback!
+        - icon: material/thumb-down-outline
+          name: This page could be improved
+          data: 0
+          note: Thanks for your feedback!
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quick Start: guide/quickstart.md
+    - CLI Reference: guide/cli.md
+    - Deployment: guide/deployment.md
+  - API Reference: api/reference.md
+  - Русский:
+    - Главная: ru/index.md
+    - Начало работы:
+      - Быстрый старт: ru/guide/quickstart.md
+      - Справочник CLI: ru/guide/cli.md
+      - Развёртывание: ru/guide/deployment.md
+    - API: ru/api/reference.md
+
+plugins:
+  - search:
+      lang:
+        - en
+        - ru
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true

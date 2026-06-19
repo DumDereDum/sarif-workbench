@@ -1,0 +1,99 @@
+rules:
+  - id: use-of-gets
+    patterns:
+      - pattern: gets(...)
+    message: >
+      gets() does not perform bounds checking — any input longer than the
+      buffer causes a stack-based buffer overflow (CWE-121). Use fgets() instead.
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      cwe: CWE-121
+      security-severity: "9.8"
+
+  - id: use-of-strcpy
+    patterns:
+      - pattern: strcpy(...)
+    message: >
+      strcpy() copies until a null terminator with no length limit — use
+      strncpy() or strlcpy() (CWE-676 / CWE-121).
+    languages: [c, cpp]
+    severity: WARNING
+    metadata:
+      cwe: CWE-676
+      security-severity: "7.5"
+
+  - id: use-of-sprintf-unbounded
+    patterns:
+      - pattern: sprintf(...)
+    message: >
+      sprintf() writes into a fixed buffer without a length limit — use
+      snprintf() instead (CWE-676 / CWE-121).
+    languages: [c, cpp]
+    severity: WARNING
+    metadata:
+      cwe: CWE-676
+      security-severity: "7.5"
+
+  - id: system-call-with-variable
+    patterns:
+      - pattern: system($X)
+      - pattern-not: system("...")
+    message: >
+      system() called with a non-literal argument — if $X contains user
+      input this is an OS command injection (CWE-78). Use execv/execve instead.
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      cwe: CWE-78
+      security-severity: "9.0"
+
+  - id: hardcoded-password-literal
+    patterns:
+      - pattern: |
+          const char* $VAR = "...";
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(password|passwd|secret|token|key|credential)
+    message: >
+      Hard-coded credential in variable '$VAR' (CWE-798). Store secrets in
+      environment variables or a secrets manager.
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      cwe: CWE-798
+      security-severity: "8.5"
+
+  - id: printf-format-string
+    patterns:
+      - pattern: printf($VAR)
+      - pattern-not: printf("...")
+      - pattern-not: printf($FMT, ...)
+    message: >
+      printf() called with a non-literal first argument — if $VAR contains
+      user input this is an uncontrolled format string (CWE-134).
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      cwe: CWE-134
+      security-severity: "8.1"
+
+  - id: malloc-return-not-checked
+    patterns:
+      - pattern: |
+          $T *$PTR = ($T *)malloc(...);
+          ...
+          $PTR->$FIELD = ...;
+      - pattern-not: |
+          $T *$PTR = ($T *)malloc(...);
+          if ($PTR == NULL) { ... }
+          ...
+          $PTR->$FIELD = ...;
+    message: >
+      malloc() return value not checked for NULL before dereferencing (CWE-476).
+      Always check the pointer before use.
+    languages: [c, cpp]
+    severity: WARNING
+    metadata:
+      cwe: CWE-476
+      security-severity: "6.5"

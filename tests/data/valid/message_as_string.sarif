@@ -1,0 +1,25 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": { "name": "TestTool", "version": "1.0", "rules": [] }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-78",
+          "level": "error",
+          "message": "Command injection",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/exec.py" },
+                "region": { "startLine": 7 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
