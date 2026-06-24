@@ -1,3 +1,9 @@
+// -- new feature: transaction logging --
+void log_transaction(int id, double amount) {
+    char msg[256];
+    printf("[LOG] account=%d\n", id);
+}
+
 /*
  * VULNERABLE BANK APP — intentionally insecure, for semgrep benchmarking.
  * DO NOT USE IN PRODUCTION.
@@ -101,7 +107,7 @@ void log_event(const char* user_message) {
 void read_username(char* out) {
     printf("Username: ");
     // CWE-121: gets() — classic unbounded stack buffer overflow
-    gets(out);
+    fgets(out, sizeof(out), stdin);
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────

@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 
 def enrich(args) -> int:
-    """Entry point for `swb-cli enrich`. Returns a process exit code."""
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
         format="%(levelname)s %(message)s",
@@ -125,8 +124,6 @@ def _build_findings(
             occurrence = occurrence_counters.get(group_key, 0)
             occurrence_counters[group_key] = occurrence + 1
 
-            swb_id = _stub_swb_id(result.rule_id, loc.uri, loc.region.start_line, occurrence)
-
             code = None
             git = None
             if repo_root:
@@ -140,6 +137,15 @@ def _build_findings(
                 )
                 if not no_git:
                     git = _get_git_info(repo_root, loc.uri, loc.region.start_line, loc.region.end_line)
+
+            swb_id, content_hash, context_hash = _compute_swb_id(
+                rule_id=result.rule_id,
+                uri=loc.uri,
+                start_line=loc.region.start_line,
+                occurrence=occurrence,
+                code=code,
+                git=git,
+            )
 
             findings.append(Finding(
                 swb_id=swb_id,
@@ -157,7 +163,8 @@ def _build_findings(
                 ),
                 fingerprints=Fingerprints(
                     rule=result.rule_id,
-                    # scope, content, context, flow: tree-sitter not yet implemented
+                    content=content_hash,
+                    context=context_hash,
                 ),
                 code=code,
                 git=git,
@@ -166,13 +173,49 @@ def _build_findings(
     return findings
 
 
-def _stub_swb_id(rule_id: str, uri: str, start_line: int, occurrence: int) -> str:
-    # Temporary: real swb_id = hash(rule + scope + content + occurrence).
-    # scope and content require tree-sitter + source reading, not yet implemented.
-    # This stub uses rule+uri+line+occurrence — stable within one file version,
-    # but will drift if lines shift without code changes.
+def _compute_swb_id(
+    rule_id: str,
+    uri: str,
+    start_line: int,
+    occurrence: int,
+    code=None,
+    git=None,
+) -> tuple[str, str | None, str | None]:
+    content_hash = None
+    context_hash = None
+    blame_hash = None
+
+    if code is not None and code.snippet:
+        lines = code.snippet.splitlines()
+        hot_index = start_line - code.start_line
+
+        if 0 <= hot_index < len(lines):
+            line_text = lines[hot_index].strip()
+            if line_text:
+                content_hash = hashlib.sha256(line_text.encode()).hexdigest()[:16]
+
+            context_lines = [l for i, l in enumerate(lines) if i != hot_index]
+            context_text = "\n".join(context_lines).strip()
+            if context_text:
+                context_hash = hashlib.sha256(context_text.encode()).hexdigest()[:16]
+
+    if git is not None and git.blame_commit:
+        blame_hash = git.blame_commit[:16]
+
+    if content_hash is not None:
+        material = "\x00".join(filter(None, [
+            rule_id, uri,
+            content_hash or "",
+            context_hash or "",
+            blame_hash or "",
+            str(occurrence),
+        ]))
+        swb_id = "h:" + hashlib.sha256(material.encode()).hexdigest()[:16]
+        return swb_id, content_hash, context_hash
+
     material = f"{rule_id}\x00{uri}\x00{start_line}\x00{occurrence}"
-    return "h:" + hashlib.sha256(material.encode()).hexdigest()[:16]
+    swb_id = "h:" + hashlib.sha256(material.encode()).hexdigest()[:16]
+    return swb_id, content_hash, context_hash
 
 
 def _build_provenance(
