@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Finding, Run
-from ..report_gen import generate_pdf
+from ..report_gen_pdf import generate_pdf
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 
-@router.get("/runs/{run_id}/report")
+@router.get("/runs/{run_id}/report-pdf")
 def get_report(
     run_id: str,
     verdict: str | None = None,   # фильтр: true_positive,false_positive,...
