@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
 from .storage import init_storage
-from .routers import findings, projects, runs, analyze, report
+from .routers import findings, projects, report_pdf, report_sarif, runs, analyze
 
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 _LOG_FILE = os.getenv("LOG_FILE", "")
@@ -60,7 +60,8 @@ app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(findings.router)
 app.include_router(analyze.router)
-app.include_router(report.router)
+app.include_router(report_pdf.router)
+app.include_router(report_sarif.router)
 
 # Serve built web app if available
 _web_dist = Path(__file__).parent.parent.parent / "web" / "dist"

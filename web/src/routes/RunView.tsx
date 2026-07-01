@@ -48,6 +48,7 @@ export default function RunView() {
   const [showAnalyze, setShowAnalyze]   = useState(false)
   const [resetState, setResetState]     = useState<'idle' | 'confirm' | 'loading'>('idle')
   const [pdfLoading, setPdfLoading]     = useState(false)
+  const [sarifLoading, setSarifLoading]     = useState(false)
 
   const toggleSev = (s: string) => setSevFilter(prev => {
     const n = new Set(prev)
@@ -88,10 +89,10 @@ export default function RunView() {
 
   const handleClose = useCallback(() => setOpenFid(null), [])
 
-  async function downloadReport() {
+  async function downloadPDFReport() {
     setPdfLoading(true)
     try {
-      const resp = await fetch(`/api/v1/runs/${runId}/report`)
+      const resp = await fetch(`/api/v1/runs/${runId}/report-pdf`)
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
         alert(err.message ?? `Ошибка ${resp.status}`)
@@ -106,6 +107,27 @@ export default function RunView() {
       URL.revokeObjectURL(url)
     } finally {
       setPdfLoading(false)
+    }
+  }
+
+  async function downloadSARIFReport() {
+    setSarifLoading(true)
+    try {
+      const resp = await fetch(`/api/v1/runs/${runId}/report-sarif`)
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        alert(err.message ?? `Ошибка ${resp.status}`)
+        return
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `report-${runId}.sarif`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setSarifLoading(false)
     }
   }
 
@@ -182,7 +204,7 @@ export default function RunView() {
               </svg>
               История прогонов
             </button>
-            <button className="btn" onClick={downloadReport} disabled={pdfLoading}>
+            <button className="btn" onClick={downloadPDFReport} disabled={pdfLoading}>
               {pdfLoading ? (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ width: 14, height: 14, border: '2px solid #ccc', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
@@ -197,6 +219,24 @@ export default function RunView() {
                     <polyline points="9 15 12 18 15 15"/>
                   </svg>
                   Скачать отчёт PDF
+                </>
+              )}
+            </button>
+            <button className="btn" onClick={downloadSARIFReport} disabled={sarifLoading}>
+              {sarifLoading ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, border: '2px solid #ccc', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
+                  Генерация…
+                </span>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 15, height: 15 }}>
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <polyline points="9 15 12 18 15 15"/>
+                  </svg>
+                  Скачать отчёт SARIF
                 </>
               )}
             </button>
