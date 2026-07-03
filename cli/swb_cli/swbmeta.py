@@ -37,16 +37,22 @@ class Locator(BaseModel):
     run: int
     result: int
     rule_id: str
-    uri: str
+    uri: str                        # as in the SARIF file — for navigation/cross-checks
+    norm_uri: str                   # normalized per ADR 0001 §3
     region: Region
 
 
 class Fingerprints(BaseModel):
+    # ADR 0001 §1/§5 — fingerprint chain, algorithm version swb-fp/2
+    algo: Literal["swb-fp/2"] = "swb-fp/2"
+    level: Literal["tool", "content", "legacy"]  # level that feeds swb_id (T-13)
     rule: str
-    scope: Optional[str] = None     # tree-sitter — not yet implemented
-    content: Optional[str] = None   # normalized code hash — not yet implemented
-    context: Optional[str] = None   # surrounding lines hash — not yet implemented
-    flow: Optional[str] = None      # codeFlow hash — not yet implemented
+    tool: Optional[dict[str, str]] = None        # passthrough fingerprints/partialFingerprints
+    tool_kind: Optional[Literal["fingerprints", "partialFingerprints"]] = None
+    content: Optional[str] = None   # sha256 of level-2 material, when source is readable
+    context: Optional[str] = None   # same hash for the ±2-line window — diagnostics only
+    scope: Optional[str] = None     # reserved (tree-sitter, Later)
+    flow: Optional[str] = None      # reserved (T-39, not part of identity)
 
 
 class GitInfo(BaseModel):
@@ -74,7 +80,7 @@ class Finding(BaseModel):
 class SwbMeta(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    schema_: Literal["swbmeta/v1"] = Field("swbmeta/v1", alias="schema")
+    schema_: Literal["swbmeta/v2"] = Field("swbmeta/v2", alias="schema")
     generated_by: str
     generated_at: str  # ISO-8601 UTC
     source_sarif: SourceSarif

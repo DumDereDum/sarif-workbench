@@ -1,0 +1,40 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "version": "2.15.0",
+          "rules": [
+            {
+              "id": "py/sql-injection",
+              "name": "SqlInjection",
+              "fullDescription": { "text": "SQL Injection" },
+              "properties": { "security-severity": "9.8" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "py/sql-injection",
+          "level": "error",
+          "message": { "text": "User input reaches SQL query" },
+          "partialFingerprints": {
+            "primaryLocationLineHash": "39fa2ee980eb94b0:1",
+            "primaryLocationStartColumnFingerprint": "4"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/db.py" },
+                "region": { "startLine": 42, "startColumn": 8 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

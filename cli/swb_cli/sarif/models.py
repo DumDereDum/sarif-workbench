@@ -14,6 +14,7 @@ class SarifRegion:
 class SarifLocation:
     uri: str
     region: SarifRegion
+    uri_base_id: str | None = None
 
 
 @dataclass
@@ -25,6 +26,8 @@ class SarifResult:
     message: str
     locations: list[SarifLocation] = field(default_factory=list)
     code_flow_steps: list[str] = field(default_factory=list)
+    fingerprints: dict[str, str] = field(default_factory=dict)
+    partial_fingerprints: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -48,3 +51,6 @@ class SarifRun:
     index: int
     tool: SarifTool
     results: list[SarifResult] = field(default_factory=list)
+    # Raw `originalUriBaseIds` mapping: base id -> artifactLocation dict
+    # ({"uri": ..., "uriBaseId": ...}); used to resolve location uriBaseId.
+    original_uri_base_ids: dict = field(default_factory=dict)

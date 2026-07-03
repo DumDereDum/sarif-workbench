@@ -27,7 +27,13 @@ def _parse_run(idx: int, run: dict) -> SarifRun:
         _parse_result(idx, ridx, r)
         for ridx, r in enumerate(run.get("results", []))
     ]
-    return SarifRun(index=idx, tool=tool, results=results)
+    bases = run.get("originalUriBaseIds")
+    return SarifRun(
+        index=idx,
+        tool=tool,
+        results=results,
+        original_uri_base_ids=bases if isinstance(bases, dict) else {},
+    )
 
 
 def _parse_tool(tool: dict) -> SarifTool:
@@ -62,7 +68,16 @@ def _parse_result(run_idx: int, result_idx: int, result: dict) -> SarifResult:
         message=_extract_text(result.get("message", {})),
         locations=locations,
         code_flow_steps=_parse_code_flows(result.get("codeFlows", [])),
+        fingerprints=_parse_fingerprint_dict(result.get("fingerprints")),
+        partial_fingerprints=_parse_fingerprint_dict(result.get("partialFingerprints")),
     )
+
+
+def _parse_fingerprint_dict(obj: object) -> dict[str, str]:
+    """Tolerant extraction of a SARIF fingerprint dict (values coerced to str)."""
+    if not isinstance(obj, dict):
+        return {}
+    return {str(k): str(v) for k, v in obj.items()}
 
 
 def _parse_location(loc: dict) -> SarifLocation:
@@ -76,6 +91,7 @@ def _parse_location(loc: dict) -> SarifLocation:
             end_line=region.get("endLine"),
             start_column=region.get("startColumn"),
         ),
+        uri_base_id=artifact.get("uriBaseId"),
     )
 
 

@@ -10,7 +10,6 @@ from pathlib import Path
 from swb_cli.swbmeta import (
     ContextPolicy,
     Finding,
-    Fingerprints,
     GitInfo,
     Locator,
     Provenance,
@@ -20,7 +19,8 @@ from swb_cli.swbmeta import (
 )
 
 from swb_cli.sarif.parser import parse_sarif
-from swb_cli.code import extract_snippet, resolve_under_root
+from swb_cli.code import extract_snippet, read_source_lines, resolve_under_root
+from swb_cli.fingerprints import build_fingerprints, normalize_uri
 
 VERSION = "0.1.0"
 logger = logging.getLogger(__name__)
@@ -135,6 +135,17 @@ def _build_findings(
 
             swb_id = _stub_swb_id(result.rule_id, loc.uri, loc.region.start_line, occurrence)
 
+            norm_uri = normalize_uri(
+                loc.uri, loc.uri_base_id, run.original_uri_base_ids, repo_root,
+            )
+            # Source window for the content fingerprint (ADR 0001 §1 level 2);
+            # read via norm_uri so uriBaseId-relative paths resolve too.
+            source_lines = (
+                read_source_lines(repo_root, norm_uri)
+                if repo_root and norm_uri
+                else None
+            )
+
             code = None
             git = None
             if repo_root:
@@ -157,15 +168,22 @@ def _build_findings(
                     result=result.result_index,
                     rule_id=result.rule_id,
                     uri=loc.uri,
+                    norm_uri=norm_uri,
                     region=Region(
                         start_line=loc.region.start_line,
                         end_line=loc.region.end_line,
                         start_column=loc.region.start_column,
                     ),
                 ),
-                fingerprints=Fingerprints(
-                    rule=result.rule_id,
-                    # scope, content, context, flow: tree-sitter not yet implemented
+                fingerprints=build_fingerprints(
+                    tool_name=run.tool.name,
+                    rule_id=result.rule_id,
+                    norm_uri=norm_uri,
+                    start_line=loc.region.start_line,
+                    end_line=loc.region.end_line,
+                    tool_fingerprints=result.fingerprints,
+                    partial_fingerprints=result.partial_fingerprints,
+                    source_lines=source_lines,
                 ),
                 code=code,
                 git=git,

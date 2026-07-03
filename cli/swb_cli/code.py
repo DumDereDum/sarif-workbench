@@ -61,23 +61,19 @@ def resolve_under_root(repo_root: Path, uri: str) -> Path | None:
     return candidate
 
 
-def extract_snippet(
-    repo_root: Path,
-    uri: str,
-    start_line: int,
-    end_line: int | None,
-    context_policy: str,
-    context_lines: int,
-) -> CodeSnippet | None:
-    if context_policy == "none":
-        return None
+def read_source_lines(repo_root: Path, uri: str) -> list[str] | None:
+    """Read a source file referenced by a SARIF ``uri`` as a list of lines.
 
+    Applies the same safety rails as snippet extraction: the path must
+    resolve under ``repo_root`` (T-01) and the file must not exceed the
+    source size limit (T-02). Returns None when unreadable.
+    """
     file_path = resolve_under_root(repo_root, uri)
     if file_path is None or not file_path.exists():
         return None
 
     # Size cap: a bloated file referenced by an untrusted uri must not be read
-    # into memory at all — degrade to snippet=None, same as T-01.
+    # into memory at all — degrade to None, same as T-01.
     max_bytes = _max_source_bytes()
     size = file_path.stat().st_size
     if size > max_bytes:
@@ -89,7 +85,23 @@ def extract_snippet(
         )
         return None
 
-    lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+
+def extract_snippet(
+    repo_root: Path,
+    uri: str,
+    start_line: int,
+    end_line: int | None,
+    context_policy: str,
+    context_lines: int,
+) -> CodeSnippet | None:
+    if context_policy == "none":
+        return None
+
+    lines = read_source_lines(repo_root, uri)
+    if lines is None:
+        return None
     total = len(lines)
 
     hot_start = start_line

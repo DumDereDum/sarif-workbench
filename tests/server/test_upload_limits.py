@@ -12,7 +12,7 @@ DATA = Path(__file__).parent.parent / "data"
 
 def _meta_for(sarif_bytes: bytes) -> bytes:
     meta = {
-        "schema": "swbmeta/v1",
+        "schema": "swbmeta/v2",
         "source_sarif": {
             "filename": "report.sarif",
             "sha256": hashlib.sha256(sarif_bytes).hexdigest(),

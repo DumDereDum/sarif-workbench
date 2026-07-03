@@ -79,6 +79,26 @@ def test_message_as_plain_string():
     runs = parse_sarif(VALID / "message_as_string.sarif")
     assert runs[0].results[0].message == "Command injection"
 
+def test_partial_fingerprints_extracted():
+    runs = parse_sarif(VALID / "with_partial_fingerprints.sarif")
+    result = runs[0].results[0]
+    assert result.partial_fingerprints == {
+        "primaryLocationLineHash": "39fa2ee980eb94b0:1",
+        "primaryLocationStartColumnFingerprint": "4",
+    }
+    assert result.fingerprints == {}
+
+def test_fingerprints_default_to_empty_dicts():
+    runs = parse_sarif(VALID / "minimal.sarif")
+    result = runs[0].results[0]
+    assert result.fingerprints == {}
+    assert result.partial_fingerprints == {}
+
+def test_uri_base_id_and_original_uri_base_ids_default_empty():
+    runs = parse_sarif(VALID / "minimal.sarif")
+    assert runs[0].original_uri_base_ids == {}
+    assert runs[0].results[0].locations[0].uri_base_id is None
+
 def test_not_sarif_json_returns_empty_runs():
     # валидный JSON, но нет ключа "runs" — возвращает пустой список
     runs = parse_sarif(INVALID / "not_sarif.json")
