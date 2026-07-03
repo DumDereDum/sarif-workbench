@@ -1,12 +1,15 @@
 """Fingerprint extraction and normalization per ADR 0001 (swb-fp/2).
 
-Implements §1 (level chain materials), §3 (norm_uri), §4 (norm_window)
-of roadmap/adr/0001-identity-and-verdict.md. swb_id itself is T-13.
+Implements §1 (level chain materials, swb_id), §2 (deterministic
+occurrence), §3 (norm_uri), §4 (norm_window) of
+roadmap/adr/0001-identity-and-verdict.md.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import posixpath
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -146,3 +149,72 @@ def build_fingerprints(
         content=content,
         context=context,
     )
+
+
+# ── swb_id + occurrence (ADR §1/§2) ──────────────────────────────────────────
+
+_LEVEL_TAGS = {"tool": "t", "content": "c", "legacy": "l"}
+_HASH_LEN = 24  # §1: sha256(material).hexdigest()[:24]
+
+
+@dataclass(frozen=True)
+class IdentitySource:
+    """Per-finding inputs to swb_id: base material (§1) + tiebreak key (§2)."""
+    tool_name: str
+    rule_id: str
+    norm_uri: str
+    start_line: int
+    start_column: int | None
+    message: str
+    fingerprints: Fingerprints
+
+
+def _canonical_json(d: dict[str, str]) -> str:
+    """§1 level 1: sorted keys, no spaces, ensure_ascii."""
+    return json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _base_hash(item: IdentitySource) -> str:
+    """sha256 hex (truncated per §1) of the base-level material."""
+    fp = item.fingerprints
+    if fp.level == "content":
+        # Level-2 hash is already computed by build_fingerprints (T-12).
+        assert fp.content is not None
+        return fp.content[:_HASH_LEN]
+    tool = item.tool_name.lower()
+    if fp.level == "tool":
+        material = _SEP.join(
+            [ALGO, "tool", tool, item.rule_id, _canonical_json(fp.tool or {})]
+        )
+    else:  # legacy
+        material = _SEP.join(
+            [ALGO, "legacy", tool, item.rule_id, item.norm_uri, str(item.start_line)]
+        )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:_HASH_LEN]
+
+
+def assign_swb_ids(items: list[IdentitySource]) -> list[tuple[str, int]]:
+    """Compute (swb_id, occurrence) for every finding of one SARIF file.
+
+    Findings sharing (level_tag, base hash) across all runs form a group
+    (ADR §2); each group is sorted by (norm_uri, start_line,
+    start_column or 0, sha256(message)) and numbered 0, 1, 2, … in that
+    order. The sort is stable, so byte-identical duplicates keep file
+    order. Result is aligned with the input order.
+    """
+    groups: dict[tuple[str, str], list[int]] = {}
+    for i, item in enumerate(items):
+        key = (_LEVEL_TAGS[item.fingerprints.level], _base_hash(item))
+        groups.setdefault(key, []).append(i)
+
+    out: list[tuple[str, int]] = [("", 0)] * len(items)
+    for (tag, base), indices in groups.items():
+        indices.sort(key=lambda i: (
+            items[i].norm_uri,
+            items[i].start_line,
+            items[i].start_column or 0,
+            hashlib.sha256(items[i].message.encode("utf-8")).hexdigest(),
+        ))
+        for occurrence, i in enumerate(indices):
+            out[i] = (f"sw2:{tag}:{base}:{occurrence}", occurrence)
+    return out

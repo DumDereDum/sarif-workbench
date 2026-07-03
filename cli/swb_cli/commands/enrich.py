@@ -20,7 +20,12 @@ from swb_cli.swbmeta import (
 
 from swb_cli.sarif.parser import parse_sarif
 from swb_cli.code import extract_snippet, read_source_lines, resolve_under_root
-from swb_cli.fingerprints import build_fingerprints, normalize_uri
+from swb_cli.fingerprints import (
+    IdentitySource,
+    assign_swb_ids,
+    build_fingerprints,
+    normalize_uri,
+)
 
 VERSION = "0.1.0"
 logger = logging.getLogger(__name__)
@@ -120,20 +125,17 @@ def _build_findings(
     context_lines: int,
     no_git: bool,
 ) -> list[Finding]:
-    findings = []
-    occurrence_counters: dict[tuple, int] = {}
+    # Two passes (ADR 0001 §2): first gather every finding with its base
+    # fingerprint material, then let assign_swb_ids number duplicates
+    # deterministically — occurrence must not depend on result order.
+    prepared: list[tuple] = []
+    identity_sources: list[IdentitySource] = []
 
     for run in runs:
         for result in run.results:
             if not result.locations:
                 continue
             loc = result.locations[0]
-
-            group_key = (result.rule_id, loc.uri, loc.region.start_line)
-            occurrence = occurrence_counters.get(group_key, 0)
-            occurrence_counters[group_key] = occurrence + 1
-
-            swb_id = _stub_swb_id(result.rule_id, loc.uri, loc.region.start_line, occurrence)
 
             norm_uri = normalize_uri(
                 loc.uri, loc.uri_base_id, run.original_uri_base_ids, repo_root,
@@ -160,45 +162,55 @@ def _build_findings(
                 if not no_git:
                     git = _get_git_info(repo_root, loc.uri, loc.region.start_line, loc.region.end_line)
 
-            findings.append(Finding(
-                swb_id=swb_id,
-                occurrence=occurrence,
-                locator=Locator(
-                    run=run.index,
-                    result=result.result_index,
-                    rule_id=result.rule_id,
-                    uri=loc.uri,
-                    norm_uri=norm_uri,
-                    region=Region(
-                        start_line=loc.region.start_line,
-                        end_line=loc.region.end_line,
-                        start_column=loc.region.start_column,
-                    ),
-                ),
-                fingerprints=build_fingerprints(
-                    tool_name=run.tool.name,
-                    rule_id=result.rule_id,
-                    norm_uri=norm_uri,
+            fingerprints = build_fingerprints(
+                tool_name=run.tool.name,
+                rule_id=result.rule_id,
+                norm_uri=norm_uri,
+                start_line=loc.region.start_line,
+                end_line=loc.region.end_line,
+                tool_fingerprints=result.fingerprints,
+                partial_fingerprints=result.partial_fingerprints,
+                source_lines=source_lines,
+            )
+
+            identity_sources.append(IdentitySource(
+                tool_name=run.tool.name,
+                rule_id=result.rule_id,
+                norm_uri=norm_uri,
+                start_line=loc.region.start_line,
+                start_column=loc.region.start_column,
+                message=result.message,
+                fingerprints=fingerprints,
+            ))
+            prepared.append((run, result, loc, norm_uri, fingerprints, code, git))
+
+    swb_ids = assign_swb_ids(identity_sources)
+
+    findings = []
+    for (run, result, loc, norm_uri, fingerprints, code, git), (swb_id, occurrence) in zip(
+        prepared, swb_ids,
+    ):
+        findings.append(Finding(
+            swb_id=swb_id,
+            occurrence=occurrence,
+            locator=Locator(
+                run=run.index,
+                result=result.result_index,
+                rule_id=result.rule_id,
+                uri=loc.uri,
+                norm_uri=norm_uri,
+                region=Region(
                     start_line=loc.region.start_line,
                     end_line=loc.region.end_line,
-                    tool_fingerprints=result.fingerprints,
-                    partial_fingerprints=result.partial_fingerprints,
-                    source_lines=source_lines,
+                    start_column=loc.region.start_column,
                 ),
-                code=code,
-                git=git,
-            ))
+            ),
+            fingerprints=fingerprints,
+            code=code,
+            git=git,
+        ))
 
     return findings
-
-
-def _stub_swb_id(rule_id: str, uri: str, start_line: int, occurrence: int) -> str:
-    # Temporary: real swb_id = hash(rule + scope + content + occurrence).
-    # scope and content require tree-sitter + source reading, not yet implemented.
-    # This stub uses rule+uri+line+occurrence — stable within one file version,
-    # but will drift if lines shift without code changes.
-    material = f"{rule_id}\x00{uri}\x00{start_line}\x00{occurrence}"
-    return "h:" + hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
 def _build_provenance(
