@@ -44,6 +44,14 @@ def enrich(args) -> int:
         else sarif_path.with_suffix(sarif_path.suffix + ".swbmeta.json")
     )
 
+    if out_path == sarif_path:
+        logger.error(
+            "Refusing to write --out to the same path as the input SARIF file: %s. "
+            "This would overwrite the original report; choose a different --out path.",
+            sarif_path,
+        )
+        return 2
+
     logger.info("Reading %s", sarif_path)
     sarif_bytes = sarif_path.read_bytes()
     sha256 = hashlib.sha256(sarif_bytes).hexdigest()

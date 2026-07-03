@@ -96,6 +96,45 @@ def test_default_out_path_is_next_to_sarif(tmp_path):
     enrich(Args(sarif, out=None))
     assert (tmp_path / "report.sarif.swbmeta.json").exists()
 
+def test_out_equal_to_input_is_rejected(tmp_path):
+    sarif = tmp_path / "report.sarif"
+    sarif.write_bytes((VALID / "minimal.sarif").read_bytes())
+    original_bytes = sarif.read_bytes()
+    original_hash = hashlib.sha256(original_bytes).hexdigest()
+
+    code = enrich(Args(sarif, out=sarif))
+
+    assert code != 0
+    assert sarif.read_bytes() == original_bytes
+    assert hashlib.sha256(sarif.read_bytes()).hexdigest() == original_hash
+
+def test_out_equal_to_input_via_relative_path_is_rejected(tmp_path):
+    # --out указывает на тот же файл, но другим (не resolved) путём:
+    # через относительный сегмент "..", который после resolve() совпадает со входом.
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    sarif = tmp_path / "report.sarif"
+    sarif.write_bytes((VALID / "minimal.sarif").read_bytes())
+    original_bytes = sarif.read_bytes()
+
+    relative_out = sub / ".." / "report.sarif"
+    code = enrich(Args(sarif, out=relative_out))
+
+    assert code != 0
+    assert sarif.read_bytes() == original_bytes
+
+def test_out_different_from_input_still_works(tmp_path):
+    sarif = tmp_path / "report.sarif"
+    sarif.write_bytes((VALID / "minimal.sarif").read_bytes())
+    out = tmp_path / "report.sarif.swbmeta.json"
+
+    code = enrich(Args(sarif, out=out))
+
+    assert code == 0
+    assert out.exists()
+    data = json.loads(out.read_text())
+    assert len(data["findings"]) == 1
+
 def test_multi_run_findings_count(tmp_path):
     out = tmp_path / "out.swbmeta.json"
     enrich(Args(VALID / "multi_run.sarif", out=out))
