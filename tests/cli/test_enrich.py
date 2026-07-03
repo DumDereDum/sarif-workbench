@@ -1,9 +1,10 @@
 import hashlib
 import json
+import logging
 import pytest
 from pathlib import Path
 
-from swb_cli.commands.enrich import enrich
+from swb_cli.commands.enrich import _get_git_info, enrich
 
 DATA = Path(__file__).parent.parent / "data"
 VALID = DATA / "valid"
@@ -188,3 +189,65 @@ def test_git_is_null_without_repo_root(tmp_path):
     enrich(Args(VALID / "minimal.sarif", out=out, repo_root=None, no_git=False))
     data = json.loads(out.read_text())
     assert data["findings"][0]["git"] is None
+
+
+# ── path traversal через uri (T-01) ──────────────────────────────────────────
+
+def _record_git_calls(monkeypatch):
+    """Подменяет _git; возвращает список перехваченных вызовов."""
+    calls = []
+
+    def fake_git(cwd, git_args):
+        calls.append(git_args)
+        return ""
+
+    monkeypatch.setattr("swb_cli.commands.enrich._git", fake_git)
+    return calls
+
+def test_git_info_rejects_relative_traversal(tmp_path, monkeypatch, caplog):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (tmp_path / "secret.py").write_text("TOP_SECRET = 1\n")
+    calls = _record_git_calls(monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        assert _get_git_info(root, "../secret.py", 1, None) is None
+    assert calls == []
+    assert "repo root" in caplog.text
+
+def test_git_info_rejects_absolute_uri_outside_root(tmp_path, monkeypatch, caplog):
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "secret.py"
+    outside.write_text("TOP_SECRET = 1\n")
+    calls = _record_git_calls(monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        assert _get_git_info(root, str(outside), 1, None) is None
+    assert calls == []
+
+def test_git_info_rejects_symlink_escaping_root(tmp_path, monkeypatch, caplog):
+    root = tmp_path / "repo"
+    root.mkdir()
+    secret = tmp_path / "secret.py"
+    secret.write_text("TOP_SECRET = 1\n")
+    (root / "link.py").symlink_to(secret)
+    calls = _record_git_calls(monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        assert _get_git_info(root, "link.py", 1, None) is None
+    assert calls == []
+
+def test_enrich_traversal_uris_get_null_code_and_warn(tmp_path, caplog):
+    # SARIF с двумя вредоносными uri и одним легитимным: enrich не падает,
+    # вредоносные находки получают code=None, легитимная обогащается как раньше
+    out = tmp_path / "out.swbmeta.json"
+    with caplog.at_level(logging.WARNING):
+        code = enrich(Args(VALID / "path_traversal.sarif", out=out,
+                           repo_root=DATA, context_policy="line"))
+    assert code == 0
+    data = json.loads(out.read_text())
+    by_uri = {f["locator"]["uri"]: f for f in data["findings"]}
+    assert by_uri["../../../../../../../../etc/passwd"]["code"] is None
+    assert by_uri["/etc/passwd"]["code"] is None
+    good = by_uri["src/db.py"]["code"]
+    assert good is not None
+    assert "CWE-89" in good["snippet"]
+    assert "repo root" in caplog.text

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from pathlib import Path
 
@@ -94,6 +96,52 @@ def test_snippet_has_correct_lang_c():
 def test_missing_file_returns_none():
     result = extract_snippet(SRC.parent, "src/nonexistent.py", 10, None, "lines", 5)
     assert result is None
+
+
+# ── extract_snippet — path traversal (T-01) ──────────────────────────────────
+
+def test_relative_traversal_returns_none(caplog):
+    # tests/cli/test_code.py существует, но лежит вне repo_root=tests/data
+    with caplog.at_level(logging.WARNING):
+        result = extract_snippet(SRC.parent, "../cli/test_code.py", 1, None, "line", 0)
+    assert result is None
+    assert "repo root" in caplog.text
+
+def test_absolute_uri_outside_root_returns_none(tmp_path, caplog):
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "secret.py"
+    outside.write_text("TOP_SECRET = 1\n")
+    with caplog.at_level(logging.WARNING):
+        result = extract_snippet(root, str(outside), 1, None, "line", 0)
+    assert result is None
+    assert "repo root" in caplog.text
+
+def test_symlink_escaping_root_returns_none(tmp_path, caplog):
+    root = tmp_path / "repo"
+    root.mkdir()
+    secret = tmp_path / "secret.py"
+    secret.write_text("TOP_SECRET = 1\n")
+    (root / "link.py").symlink_to(secret)
+    with caplog.at_level(logging.WARNING):
+        result = extract_snippet(root, "link.py", 1, None, "line", 0)
+    assert result is None
+    assert "repo root" in caplog.text
+
+def test_symlink_inside_root_still_allowed(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "real.py").write_text("x = 1  # marker\n")
+    (root / "alias.py").symlink_to(root / "real.py")
+    result = extract_snippet(root, "alias.py", 1, None, "line", 0)
+    assert result is not None
+    assert "marker" in result.snippet
+
+def test_dotdot_staying_inside_root_still_allowed():
+    # ".." в uri сам по себе не криминал — важно, куда резолвится путь
+    result = extract_snippet(SRC.parent, "src/../src/db.py", 42, None, "line", 0)
+    assert result is not None
+    assert "CWE-89" in result.snippet
 
 
 # ── each fixture file — finding line contains expected marker ─────────────────

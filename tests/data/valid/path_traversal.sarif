@@ -1,0 +1,55 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "version": "1.0.0",
+          "rules": []
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EVIL-1",
+          "level": "error",
+          "message": { "text": "Relative traversal escaping repo_root" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "../../../../../../../../etc/passwd" },
+                "region": { "startLine": 1 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "EVIL-2",
+          "level": "error",
+          "message": { "text": "Absolute path outside repo_root" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "/etc/passwd" },
+                "region": { "startLine": 1 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CWE-89",
+          "level": "error",
+          "message": { "text": "Legit finding inside repo_root" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/db.py" },
+                "region": { "startLine": 42 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

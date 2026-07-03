@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from swb_cli.swbmeta import CodeSnippet
+
+logger = logging.getLogger(__name__)
 
 _EXT_TO_LANG: dict[str, str] = {
     ".py":   "python",
@@ -31,6 +34,26 @@ def detect_lang(uri: str) -> str | None:
     return _EXT_TO_LANG.get(Path(uri).suffix.lower())
 
 
+def resolve_under_root(repo_root: Path, uri: str) -> Path | None:
+    """Resolve a SARIF ``uri`` against ``repo_root``, rejecting escapes.
+
+    SARIF files are untrusted input: a crafted ``uri`` (absolute path,
+    ``../`` traversal, or a symlink pointing outside the repo) must not let
+    enrich read arbitrary host files. Returns the resolved path when it stays
+    under ``repo_root``, otherwise logs a warning and returns None.
+    """
+    root = repo_root.resolve()
+    try:
+        candidate = (root / uri).resolve()
+    except (OSError, RuntimeError) as exc:  # symlink loop, path too long, …
+        logger.warning("Cannot resolve uri %r under repo root: %s; skipping", uri, exc)
+        return None
+    if not candidate.is_relative_to(root):
+        logger.warning("uri %r resolves outside repo root %s; skipping", uri, root)
+        return None
+    return candidate
+
+
 def extract_snippet(
     repo_root: Path,
     uri: str,
@@ -42,8 +65,8 @@ def extract_snippet(
     if context_policy == "none":
         return None
 
-    file_path = repo_root / uri
-    if not file_path.exists():
+    file_path = resolve_under_root(repo_root, uri)
+    if file_path is None or not file_path.exists():
         return None
 
     lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()

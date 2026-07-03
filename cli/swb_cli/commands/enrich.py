@@ -20,7 +20,7 @@ from swb_cli.swbmeta import (
 )
 
 from swb_cli.sarif.parser import parse_sarif
-from swb_cli.code import extract_snippet
+from swb_cli.code import extract_snippet, resolve_under_root
 
 VERSION = "0.1.0"
 logger = logging.getLogger(__name__)
@@ -216,8 +216,8 @@ def _get_git_info(
     start_line: int,
     end_line: int | None,
 ) -> GitInfo | None:
-    file_path = repo_root / uri
-    if not file_path.exists():
+    file_path = resolve_under_root(repo_root, uri)
+    if file_path is None or not file_path.exists():
         return None
     try:
         blob_sha = _git(repo_root, ["hash-object", str(file_path)])
