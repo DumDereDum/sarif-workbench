@@ -7,8 +7,8 @@
 [![Docs](https://img.shields.io/badge/docs-dumderdum.github.io-blue)](https://dumderdum.github.io/sarif-workbench/)
 
 Browse results from CodeQL, Semgrep, Svace, Checkmarx, or any SARIF 2.1.0-compatible analyzer.
-Triage findings with AI assistance (DeepSeek, GigaChat, YandexGPT, vLLM, Ollama).
-Export PDF reports. Works fully offline — built for air-gapped and corporate environments.
+Triage findings with AI assistance (DeepSeek today; GigaChat, YandexGPT, vLLM, Ollama are planned — see Roadmap).
+Export PDF reports. Fully offline / air-gapped operation is a roadmap goal — the current AI triage step calls the cloud DeepSeek API.
 
 **[Documentation →](https://dumderdum.github.io/sarif-workbench/)**
 
@@ -49,9 +49,9 @@ make sample   # enriches and uploads samples/cpp-bank/report.sarif
 
 | Problem | Solution |
 |---|---|
-| Hundreds of SAST findings per run | AI triage classifies each as **TP / FP / Uncertain** |
-| Code must not leave the security perimeter | Local LLM providers: vLLM, Ollama, GigaChat, YandexGPT |
-| No cross-run tracking | Run comparison against a baseline (new / closed / unchanged) |
+| Hundreds of SAST findings per run | AI triage classifies each as **TP / FP / Uncertain** (built-in `honest` prompt; a `force_fp` preset is also available for testing/formal-report workflows — see [`ai/prompts.py`](server/swb_server/ai/prompts.py)) |
+| Code must not leave the security perimeter | Local LLM providers: vLLM, Ollama, GigaChat, YandexGPT — **planned**, not yet implemented (only the cloud DeepSeek API works today) |
+| No cross-run tracking | Run comparison against a baseline (new / closed / unchanged) — **planned**, not yet implemented |
 | Ad-hoc reports in spreadsheets | One-click **PDF export** in Svacer-compatible format |
 
 ---
@@ -76,7 +76,7 @@ Three components:
 **Key invariants:**
 - Original SARIF is **immutable** — stored byte-for-byte, never rewritten
 - Data reaches the server **only via CLI** — the web UI does not upload
-- All components run offline — no external network calls required
+- Ingestion, browsing, PDF export, and manual triage need no network access. AI triage is the exception: it sends finding details to the cloud DeepSeek API using the API key you provide when starting an analysis run. Fully offline operation via local LLM providers is planned — see Roadmap.
 
 ---
 
@@ -85,16 +85,13 @@ Three components:
 ### Install
 
 ```bash
-# Option 1 — via uv (recommended for development)
 curl -Ls https://astral.sh/uv/install.sh | sh
 git clone https://github.com/DumDereDum/sarif-workbench && cd sarif-workbench
 uv sync
 uv run swb-cli --help
-
-# Option 2 — standalone binary (CI / air-gap)
-uv run pyinstaller cli/swb_cli.spec --distpath dist/
-sudo cp dist/swb-cli /usr/local/bin/
 ```
+
+A standalone PyInstaller binary for CI / air-gapped installs is planned but not set up yet (no `.spec` file in the repo).
 
 ### `swb-cli enrich`
 
@@ -214,7 +211,7 @@ sarif-workbench/
 │       └── api/            typed API client
 ├── docs/                   MkDocs documentation
 ├── samples/                sample SARIF files for testing
-├── tests/                  pytest test suite (60+ tests)
+├── tests/                  pytest test suite (83 tests)
 ├── docker-compose.yml      dev environment
 ├── docker-compose.prod.yml production environment
 ├── Makefile                convenience commands
@@ -231,7 +228,7 @@ sarif-workbench/
 - [x] PDF export (WeasyPrint, Svacer-compatible layout)
 - [x] Verdict reset
 - [ ] tree-sitter fingerprints (stable `swb_id` across runs)
-- [ ] Manual verdict override UI (`PATCH /findings/{fid}/verdict`)
+- [x] Manual verdict override UI (`PATCH /findings/{fid}/verdict`)
 - [ ] Run comparison / baseline delta view
 - [ ] GigaChat / YandexGPT / vLLM / Ollama providers
 - [ ] Authentication
