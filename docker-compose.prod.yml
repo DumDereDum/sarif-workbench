@@ -34,8 +34,8 @@ services:
     profiles: [postgres]
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: swb
-      POSTGRES_PASSWORD: swb
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER не задан — скопируй .env.example в .env и заполни его}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан — скопируй .env.example в .env и заполни его}
       POSTGRES_DB: swb
     volumes:
       - pg_data:/var/lib/postgresql/data
@@ -47,8 +47,8 @@ services:
     image: minio/minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER не задан — скопируй .env.example в .env и заполни его}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD не задан — скопируй .env.example в .env и заполни его}
     volumes:
       - minio_data:/data
     ports:

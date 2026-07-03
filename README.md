@@ -34,6 +34,7 @@ docker compose up          # dev mode: http://localhost:5173
 For production:
 
 ```bash
+cp .env.example .env && $EDITOR .env   # fill in POSTGRES_*/MINIO_ROOT_* before first run
 docker compose -f docker-compose.prod.yml up --build -d   # http://localhost
 ```
 
@@ -143,10 +144,16 @@ make debug                  # start with LOG_LEVEL=DEBUG (full LLM request/respo
 ### Production
 
 ```bash
+cp .env.example .env   # fill in POSTGRES_USER/PASSWORD and MINIO_ROOT_USER/PASSWORD first
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
 nginx on port 80 serves the React bundle and proxies `/api/` to FastAPI. Data persists in a Docker volume.
+
+`docker-compose.prod.yml` has no default credentials: `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`MINIO_ROOT_USER`, and `MINIO_ROOT_PASSWORD` are required (`${VAR:?...}`) and compose refuses
+to start without them, even if you don't use the `postgres`/`s3` profiles — variable
+interpolation runs over the whole file before profiles are applied.
 
 ---
 
@@ -160,6 +167,10 @@ Copy `.env.example` → `.env` and edit:
 | `LOG_FILE` | _(empty)_ | Log file path (Docker: `./logs/server.log`) |
 | `DATA_DIR` | `/data` | Directory for SQLite DB and blob files |
 | `DATABASE_URL` | `sqlite:////data/swb.db` | SQLite database path |
+| `POSTGRES_USER` | _(required, no default)_ | `docker-compose.prod.yml` `postgres` service — only used with `--profile postgres` / `make prod-full`, but must be set for any `make prod` run |
+| `POSTGRES_PASSWORD` | _(required, no default)_ | Same as above — don't reuse the image's old `swb` default |
+| `MINIO_ROOT_USER` | _(required, no default)_ | `docker-compose.prod.yml` `minio` service — only used with `--profile s3` / `make prod-full`, but must be set for any `make prod` run |
+| `MINIO_ROOT_PASSWORD` | _(required, no default)_ | Same as above — don't reuse the image's old `minioadmin` default; MinIO requires 8+ chars |
 
 ---
 
