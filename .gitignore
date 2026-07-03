@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/
 lib64/
 parts/
 sdist/
@@ -219,7 +219,10 @@ __marimo__/
 
 # sarif-workbench
 .claude/
+CLAUDE.md
 *.swbmeta.json
+inspection/
+roadmap/
 
 # macOS
 .DS_Store
