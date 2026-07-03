@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import uuid
 from datetime import datetime
@@ -19,6 +20,40 @@ router = APIRouter(prefix="/api/v1")
 
 _SEV_ORDER = ["critical", "high", "medium", "low", "note"]
 
+_DEFAULT_MAX_UPLOAD_MB = 50
+_UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _max_upload_mb() -> int:
+    return int(os.environ.get("SWB_MAX_UPLOAD_MB", _DEFAULT_MAX_UPLOAD_MB))
+
+
+async def _read_limited(upload: UploadFile, field: str) -> bytes:
+    """Read an uploaded file, rejecting it with 413 before buffering past the limit.
+
+    The multipart parser has already spooled the part to a temp file, so its
+    ``size`` is normally known and oversized uploads are rejected without
+    reading a single byte into memory. The chunked loop is a fallback for the
+    case when the size is unknown — it stops as soon as the cap is crossed
+    instead of loading the whole file.
+    """
+    limit_mb = _max_upload_mb()
+    limit = limit_mb * 1024 * 1024
+    detail = {
+        "error": "payload_too_large",
+        "message": f"{field} file exceeds the upload limit of {limit_mb} MB (SWB_MAX_UPLOAD_MB)",
+    }
+    if upload.size is not None and upload.size > limit:
+        raise HTTPException(413, detail)
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await upload.read(_UPLOAD_CHUNK_SIZE):
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(413, detail)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 @router.post("/runs", status_code=201)
 async def upload_run(
@@ -26,8 +61,8 @@ async def upload_run(
     meta: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    sarif_bytes = await sarif.read()
-    meta_bytes = await meta.read()
+    sarif_bytes = await _read_limited(sarif, "sarif")
+    meta_bytes = await _read_limited(meta, "meta")
 
     try:
         meta_data = json.loads(meta_bytes)

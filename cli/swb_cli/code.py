@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from swb_cli.swbmeta import CodeSnippet
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_MAX_SOURCE_MB = 10
+
+
+def _max_source_bytes() -> int:
+    return int(os.environ.get("SWB_MAX_SOURCE_MB", _DEFAULT_MAX_SOURCE_MB)) * 1024 * 1024
 
 _EXT_TO_LANG: dict[str, str] = {
     ".py":   "python",
@@ -67,6 +74,19 @@ def extract_snippet(
 
     file_path = resolve_under_root(repo_root, uri)
     if file_path is None or not file_path.exists():
+        return None
+
+    # Size cap: a bloated file referenced by an untrusted uri must not be read
+    # into memory at all — degrade to snippet=None, same as T-01.
+    max_bytes = _max_source_bytes()
+    size = file_path.stat().st_size
+    if size > max_bytes:
+        logger.warning(
+            "File %r is %d bytes, over the %d MB source limit (SWB_MAX_SOURCE_MB); skipping snippet",
+            uri,
+            size,
+            max_bytes // (1024 * 1024),
+        )
         return None
 
     lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()

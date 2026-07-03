@@ -251,3 +251,21 @@ def test_enrich_traversal_uris_get_null_code_and_warn(tmp_path, caplog):
     assert good is not None
     assert "CWE-89" in good["snippet"]
     assert "repo root" in caplog.text
+
+
+# ── лимит размера исходников (T-02) ──────────────────────────────────────────
+
+def test_enrich_oversized_source_gets_null_code_and_warns(tmp_path, monkeypatch, caplog):
+    # исходник крупнее лимита: enrich не падает, code=None, warning в stderr-лог
+    monkeypatch.setenv("SWB_MAX_SOURCE_MB", "1")
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "db.py").write_bytes(b"# huge\n" * 300_000)  # ~2 МБ > лимита в 1 МБ
+    out = tmp_path / "out.swbmeta.json"
+    with caplog.at_level(logging.WARNING):
+        code = enrich(Args(VALID / "minimal.sarif", out=out,
+                           repo_root=tmp_path, context_policy="line"))
+    assert code == 0
+    data = json.loads(out.read_text())
+    assert data["findings"][0]["code"] is None
+    assert "SWB_MAX_SOURCE_MB" in caplog.text
