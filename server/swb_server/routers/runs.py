@@ -178,6 +178,21 @@ async def upload_run(
                 )
                 db.add(identity)
                 db.flush()
+            elif (identity.verdict or "unmarked") != "unmarked":
+                # Совпадение с уже известной identity, несущей вердикт (T-21,
+                # ADR 0001 §6/§7): переносить нечего — вердикт уже лежит на
+                # identity и виден автоматически через join. Здесь только
+                # фиксируем событием, что он был применён к новому скану;
+                # old = new, rationale сохраняем как есть (не сбрасываем).
+                write_verdict(
+                    db,
+                    identity,
+                    new_verdict=identity.verdict,
+                    source="carried",
+                    actor="system",
+                    rationale=identity.rationale,
+                    run_id=run_id,
+                )
             identities[swb_id] = identity
         identity.last_seen_run_id = run_id
         identity.last_seen_at = now
