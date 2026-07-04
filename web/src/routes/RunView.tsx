@@ -6,6 +6,12 @@ import { SEV_ORDER, SEV, sevStyle, sevLabel } from '../lib/severity'
 import { VD_ORDER, VERDICT, verdictStyle, verdictLabel } from '../lib/verdict'
 import FindingDrawer from '../components/FindingDrawer'
 import AnalyzeModal from '../components/AnalyzeModal'
+import DiffView from '../components/DiffView'
+
+const VIEW_TABS = [
+  { key: 'findings', label: 'Находки' },
+  { key: 'diff',      label: 'Сравнение с бейзлайном' },
+] as const
 
 const AGG_TABS = [
   { key: 'severity', label: 'Severity' },
@@ -39,6 +45,7 @@ export default function RunView() {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>()
   const navigate = useNavigate()
 
+  const [view, setView] = useState<typeof VIEW_TABS[number]['key']>('findings')
   const [aggBy, setAggBy] = useState<string>('severity')
   const [aggValue, setAggValue] = useState<string | null>(null)
   const [sevFilter, setSevFilter] = useState<Set<string>>(new Set())
@@ -268,6 +275,25 @@ export default function RunView() {
         </div>
       </div>
 
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="agg-tabs">
+          {VIEW_TABS.map(t => (
+            <button
+              key={t.key}
+              className={`agg-tab${view === t.key ? ' active' : ''}`}
+              onClick={() => setView(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'diff' && (
+        <DiffView runId={runId!} baselineRunId={runData.baseline_run_id} />
+      )}
+
+      {view === 'findings' && (
       <div className="work">
         {/* Aggregation panel */}
         <div className="panel">
@@ -401,6 +427,7 @@ export default function RunView() {
           </div>
         </div>
       </div>
+      )}
 
       <FindingDrawer findingId={openFid} runId={runId!} onClose={handleClose} />
 
