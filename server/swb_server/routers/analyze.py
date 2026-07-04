@@ -26,6 +26,7 @@ class AnalyzeRequest(BaseModel):
     prompt_id: str = "honest"          # honest | force_fp | custom
     custom_system: str | None = None   # used when prompt_id == "custom"
     only_unmarked: bool = True
+    override: bool = False             # T-24: перезаписывать human-вердикты только явно
 
 
 @router.get("/prompts")
@@ -61,20 +62,37 @@ async def analyze_run(
                 )
             findings = q.all()
 
+            # T-24: human-вердикт по умолчанию неприкосновенен — AI-анализ
+            # пропускает такие находки, если не передан явный override.
+            # Human-«unmarked» не защищается: это отсутствие решения.
+            skipped_human = 0
+            if not req.override:
+                kept = []
+                for f in findings:
+                    ident = f.identity
+                    if ident is not None and ident.verdict_source == "human" and ident.verdict != "unmarked":
+                        skipped_human += 1
+                    else:
+                        kept.append(f)
+                findings = kept
+
             total = len(findings)
             tokens_total = 0
 
             logger.info(
-                "[analyze] START run_id=%s  provider=%s  model=%s  prompt=%s  only_unmarked=%s  findings=%d",
-                run_id, req.provider, req.model, req.prompt_id, req.only_unmarked, total,
+                "[analyze] START run_id=%s  provider=%s  model=%s  prompt=%s  only_unmarked=%s  override=%s  findings=%d  skipped_human=%d",
+                run_id, req.provider, req.model, req.prompt_id, req.only_unmarked, req.override, total, skipped_human,
             )
 
             if total == 0:
                 logger.info("[analyze] no findings to process, exiting early")
-                yield _event({"type": "done", "done": 0, "total": 0, "tokens_total": 0, "message": "Нет находок для анализа"})
+                yield _event({
+                    "type": "done", "done": 0, "total": 0, "tokens_total": 0,
+                    "skipped_human": skipped_human, "message": "Нет находок для анализа",
+                })
                 return
 
-            yield _event({"type": "start", "total": total})
+            yield _event({"type": "start", "total": total, "skipped_human": skipped_human})
 
             for i, finding in enumerate(findings):
                 logger.debug(
@@ -167,7 +185,10 @@ async def analyze_run(
                 session.commit()
                 logger.info("[analyze] DONE run_id=%s  counts=%s  tokens_total=%d", run_id, cvd, tokens_total)
 
-            yield _event({"type": "done", "done": total, "total": total, "tokens_total": tokens_total})
+            yield _event({
+                "type": "done", "done": total, "total": total,
+                "tokens_total": tokens_total, "skipped_human": skipped_human,
+            })
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
 
