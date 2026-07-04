@@ -29,6 +29,28 @@ def _max_upload_mb() -> int:
     return int(os.environ.get("SWB_MAX_UPLOAD_MB", _DEFAULT_MAX_UPLOAD_MB))
 
 
+def _serialize_finding(f: Finding) -> dict:
+    return {
+        "id": f.id,
+        "swb_id": f.swb_id,
+        "occurrence": f.occurrence,
+        # версия алгоритма и уровень отпечатка — с identity (ADR 0001 §6, T-15)
+        "fingerprint_algo": (f.identity.algo if f.identity else None),
+        "fingerprint_level": (f.identity.level if f.identity else None),
+        "severity": f.severity,
+        "rule_id": f.rule_id,
+        "rule_name": f.rule_name,
+        "cwe": f.cwe,
+        "uri": f.uri,
+        "start_line": f.start_line,
+        "scope": f.scope,
+        "message": f.message,
+        "verdict": (f.identity.verdict if f.identity else "unmarked"),
+        "verdict_source": (f.identity.verdict_source if f.identity else None),
+        "lang": f.lang,
+    }
+
+
 async def _read_limited(upload: UploadFile, field: str) -> bytes:
     """Read an uploaded file, rejecting it with 413 before buffering past the limit.
 
@@ -301,28 +323,7 @@ def list_findings(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [
-            {
-                "id": f.id,
-                "swb_id": f.swb_id,
-                "occurrence": f.occurrence,
-                # версия алгоритма и уровень отпечатка — с identity (ADR 0001 §6, T-15)
-                "fingerprint_algo": (f.identity.algo if f.identity else None),
-                "fingerprint_level": (f.identity.level if f.identity else None),
-                "severity": f.severity,
-                "rule_id": f.rule_id,
-                "rule_name": f.rule_name,
-                "cwe": f.cwe,
-                "uri": f.uri,
-                "start_line": f.start_line,
-                "scope": f.scope,
-                "message": f.message,
-                "verdict": (f.identity.verdict if f.identity else "unmarked"),
-                "verdict_source": (f.identity.verdict_source if f.identity else None),
-                "lang": f.lang,
-            }
-            for f in page_findings
-        ],
+        "items": [_serialize_finding(f) for f in page_findings],
     }
 
 
@@ -360,6 +361,60 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
 
     groups = sorted(counts.values(), key=lambda x: -x["count"])
     return {"by": by, "groups": groups}
+
+
+@router.get("/runs/{run_id}/diff")
+def diff_run(run_id: str, baseline: str | None = None, db: Session = Depends(get_db)):
+    """new/closed/unchanged между `run_id` (target) и `baseline`, сравнение по identity (ADR 0001 §6).
+
+    `baseline` — id рана-опоры; если не передан, берётся `project.baseline_run_id`
+    (T-22, вторая половина ценности identity после переноса вердиктов T-21).
+    """
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
+
+    baseline_run_id = baseline or (run.project.baseline_run_id if run.project else None)
+    if not baseline_run_id:
+        raise HTTPException(
+            400,
+            {
+                "error": "no_baseline",
+                "message": "No baseline query param given and the project has no baseline_run_id set",
+            },
+        )
+
+    baseline_run = db.query(Run).filter(Run.id == baseline_run_id).first()
+    if not baseline_run:
+        raise HTTPException(404, {"error": "not_found", "message": "Baseline run not found"})
+
+    if baseline_run.project_id != run.project_id:
+        raise HTTPException(
+            400,
+            {
+                "error": "baseline_project_mismatch",
+                "message": "Baseline run belongs to a different project",
+            },
+        )
+
+    target_findings = db.query(Finding).filter(Finding.run_id == run_id).all()
+    baseline_findings = db.query(Finding).filter(Finding.run_id == baseline_run_id).all()
+
+    target_identity_ids = {f.identity_id for f in target_findings}
+    baseline_identity_ids = {f.identity_id for f in baseline_findings}
+
+    new = [f for f in target_findings if f.identity_id not in baseline_identity_ids]
+    unchanged = [f for f in target_findings if f.identity_id in baseline_identity_ids]
+    closed = [f for f in baseline_findings if f.identity_id not in target_identity_ids]
+
+    return {
+        "run_id": run_id,
+        "baseline_run_id": baseline_run_id,
+        "new": [_serialize_finding(f) for f in new],
+        "closed": [_serialize_finding(f) for f in closed],
+        "unchanged": [_serialize_finding(f) for f in unchanged],
+        "counts": {"new": len(new), "closed": len(closed), "unchanged": len(unchanged)},
+    }
 
 
 @router.post("/runs/{run_id}/reset")
