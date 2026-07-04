@@ -53,6 +53,10 @@ def _text(obj: Any) -> str:
     return str(obj) if obj else ""
 
 
+class MetaValidationError(ValueError):
+    """swbmeta не проходит валидацию ingest'а — ошибка meta-входа, не SARIF'а."""
+
+
 _LEVEL_TAGS = {"t": "tool", "c": "content", "l": "legacy"}
 
 
@@ -109,7 +113,15 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
     counts["all"] = 0
     findings_out: list[dict] = []
 
-    for mf in meta.get("findings", []):
+    for i, mf in enumerate(meta.get("findings", [])):
+        # swb_id обязателен: identity строится на точном равенстве этой строки
+        # (ADR 0001 §1/§6); пустой id схлопнул бы разные находки в одну identity.
+        swb_id = mf.get("swb_id") or ""
+        if not swb_id:
+            raise MetaValidationError(
+                f"findings[{i}]: missing swb_id — regenerate the sidecar with swb-cli (swbmeta/v2)"
+            )
+
         loc = mf.get("locator", {})
         run_idx = loc.get("run", 0)
         res_idx = loc.get("result", 0)
@@ -133,7 +145,6 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         counts[severity] = counts.get(severity, 0) + 1
         counts["all"] += 1
 
-        swb_id = mf.get("swb_id", "")
         findings_out.append({
             "swb_id": swb_id,
             # ключи fingerprint_* не являются колонками Finding — upload

@@ -57,6 +57,9 @@ def get_finding(finding_id: str, db: Session = Depends(get_db)):
         "id": f.id,
         "swb_id": f.swb_id,
         "occurrence": f.occurrence,
+        # версия алгоритма и уровень отпечатка — с identity (ADR 0001 §6, T-15)
+        "fingerprint_algo": identity.algo if identity else None,
+        "fingerprint_level": identity.level if identity else None,
         "severity": f.severity,
         "rule_id": f.rule_id,
         "rule_name": f.rule_name,

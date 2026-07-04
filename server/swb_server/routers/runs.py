@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..ingest import ingest
+from ..ingest import MetaValidationError, ingest
 from ..models import Finding, FindingIdentity, Project, Rule, Run
 from ..storage import load_blob, save_blob
 from ..verdicts import write_verdict
@@ -112,6 +112,8 @@ async def upload_run(
     # Parse SARIF + meta
     try:
         ingested = ingest(sarif_bytes, meta_data)
+    except MetaValidationError as exc:
+        raise HTTPException(422, {"error": "invalid_meta", "message": str(exc)})
     except Exception as exc:
         raise HTTPException(422, {"error": "invalid_sarif", "message": str(exc)})
 
@@ -289,6 +291,9 @@ def list_findings(
                 "id": f.id,
                 "swb_id": f.swb_id,
                 "occurrence": f.occurrence,
+                # версия алгоритма и уровень отпечатка — с identity (ADR 0001 §6, T-15)
+                "fingerprint_algo": (f.identity.algo if f.identity else None),
+                "fingerprint_level": (f.identity.level if f.identity else None),
                 "severity": f.severity,
                 "rule_id": f.rule_id,
                 "rule_name": f.rule_name,
