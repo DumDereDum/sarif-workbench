@@ -13,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..ingest import ingest
-from ..models import Finding, Project, Rule, Run
+from ..models import Finding, FindingIdentity, Project, Rule, Run
 from ..storage import load_blob, save_blob
+from ..verdicts import write_verdict
 
 router = APIRouter(prefix="/api/v1")
 
@@ -134,12 +135,6 @@ async def upload_run(
         meta_key=meta_key,
         sarif_sha256=actual_sha,
         counts=ingested["counts"],
-        counts_by_verdict={
-            "true_positive": 0,
-            "false_positive": 0,
-            "uncertain": 0,
-            "unmarked": ingested["counts"].get("all", 0),
-        },
     )
     db.add(run)
     db.flush()
@@ -155,10 +150,40 @@ async def upload_run(
             default_severity=info["default_severity"],
         ))
 
-    # Findings
+    # Findings: find-or-create identity по (project_id, swb_id) — ADR 0001 §6
+    now = datetime.utcnow()
+    identities: dict[str, FindingIdentity] = {}
+    cvd = {"true_positive": 0, "false_positive": 0, "uncertain": 0, "unmarked": 0}
     for fd in ingested["findings"]:
-        db.add(Finding(run_id=run_id, **fd))
+        algo = fd.pop("fingerprint_algo")
+        level = fd.pop("fingerprint_level")
+        swb_id = fd["swb_id"]
+        identity = identities.get(swb_id)
+        if identity is None:
+            identity = (
+                db.query(FindingIdentity)
+                .filter(FindingIdentity.project_id == project_id, FindingIdentity.swb_id == swb_id)
+                .first()
+            )
+            if identity is None:
+                identity = FindingIdentity(
+                    project_id=project_id,
+                    swb_id=swb_id,
+                    algo=algo,
+                    level=level,
+                    first_seen_run_id=run_id,
+                    first_seen_at=now,
+                )
+                db.add(identity)
+                db.flush()
+            identities[swb_id] = identity
+        identity.last_seen_run_id = run_id
+        identity.last_seen_at = now
+        v = identity.verdict or "unmarked"
+        cvd[v] = cvd.get(v, 0) + 1
+        db.add(Finding(run_id=run_id, identity_id=identity.id, **fd))
 
+    run.counts_by_verdict = cvd
     db.commit()
 
     return {
@@ -216,7 +241,9 @@ def list_findings(
     if severity:
         query = query.filter(Finding.severity.in_([s.strip() for s in severity.split(",")]))
     if verdict:
-        query = query.filter(Finding.verdict.in_([v.strip() for v in verdict.split(",")]))
+        query = query.join(FindingIdentity, Finding.identity_id == FindingIdentity.id).filter(
+            FindingIdentity.verdict.in_([v.strip() for v in verdict.split(",")])
+        )
     if rule:
         query = query.filter(Finding.rule_id.contains(rule))
     if cwe:
@@ -240,7 +267,8 @@ def list_findings(
             return _SEV_ORDER.index(f.severity) if f.severity in _SEV_ORDER else 99
         if sort == "verdict":
             order = ["true_positive", "false_positive", "uncertain", "unmarked"]
-            return order.index(f.verdict) if f.verdict in order else 99
+            v = f.identity.verdict if f.identity else "unmarked"
+            return order.index(v) if v in order else 99
         if sort == "file":
             return f.uri or ""
         return getattr(f, sort, "") or ""
@@ -269,9 +297,8 @@ def list_findings(
                 "start_line": f.start_line,
                 "scope": f.scope,
                 "message": f.message,
-                "verdict": f.verdict,
-                "verdict_source": f.verdict_source,
-                "confidence": f.confidence,
+                "verdict": (f.identity.verdict if f.identity else "unmarked"),
+                "verdict_source": (f.identity.verdict_source if f.identity else None),
                 "lang": f.lang,
             }
             for f in page_findings
@@ -292,7 +319,7 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
             key = f.severity or "note"
             label = key.capitalize()
         elif by == "verdict":
-            key = f.verdict or "unmarked"
+            key = (f.identity.verdict if f.identity else None) or "unmarked"
             label = key
         elif by == "rule":
             key = f.rule_id or ""
@@ -322,15 +349,23 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
 
     findings = db.query(Finding).filter(Finding.run_id == run_id).all()
+    # Сброс снапшотов identity, встречающихся в ране, через writer-одиночку;
+    # события journal'а append-only — не удаляются (ADR 0001 §6)
+    seen: set[str] = set()
     for f in findings:
-        f.verdict = "unmarked"
-        f.rationale = None
-        f.verdict_source = None
-        f.provider = None
-        f.model_version = None
-        f.confidence = None
-        f.needs_reconfirm = False
-        f.verdict_history = None
+        identity = f.identity
+        if identity is None or identity.id in seen:
+            continue
+        seen.add(identity.id)
+        if (identity.verdict or "unmarked") != "unmarked":
+            write_verdict(
+                db,
+                identity,
+                new_verdict="unmarked",
+                source="reset",
+                actor="system",
+                run_id=run_id,
+            )
 
     total = len(findings)
     run.counts_by_verdict = {

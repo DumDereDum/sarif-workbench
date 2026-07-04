@@ -53,6 +53,17 @@ def _text(obj: Any) -> str:
     return str(obj) if obj else ""
 
 
+_LEVEL_TAGS = {"t": "tool", "c": "content", "l": "legacy"}
+
+
+def _fingerprint_level(swb_id: str, fps: dict) -> str:
+    """Level из префикса swb_id (`sw2:{t|c|l}:hash:occ`, ADR 0001 §1)."""
+    parts = swb_id.split(":")
+    if len(parts) == 4 and parts[0] == "sw2" and parts[1] in _LEVEL_TAGS:
+        return _LEVEL_TAGS[parts[1]]
+    return fps.get("level") or "legacy"
+
+
 def ingest(sarif_bytes: bytes, meta: dict) -> dict:
     """
     Returns:
@@ -122,8 +133,13 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         counts[severity] = counts.get(severity, 0) + 1
         counts["all"] += 1
 
+        swb_id = mf.get("swb_id", "")
         findings_out.append({
-            "swb_id": mf.get("swb_id", ""),
+            "swb_id": swb_id,
+            # ключи fingerprint_* не являются колонками Finding — upload
+            # снимает их (pop) при создании/поиске FindingIdentity
+            "fingerprint_algo": fps.get("algo") or "swb-fp/2",
+            "fingerprint_level": _fingerprint_level(swb_id, fps),
             "occurrence": mf.get("occurrence", 0),
             "rule_id": rule_id,
             "rule_name": rule_info.get("name", ""),

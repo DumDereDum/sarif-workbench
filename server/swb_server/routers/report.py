@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Finding, Run
+from ..models import Finding, FindingIdentity, Run
 from ..report_gen import generate_pdf
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,9 @@ def get_report(
     q = db.query(Finding).filter(Finding.run_id == run_id)
     if verdict:
         verdicts = [v.strip() for v in verdict.split(",")]
-        q = q.filter(Finding.verdict.in_(verdicts))
+        q = q.join(FindingIdentity, Finding.identity_id == FindingIdentity.id).filter(
+            FindingIdentity.verdict.in_(verdicts)
+        )
     findings = q.order_by(Finding.severity, Finding.uri, Finding.start_line).all()
 
     if not findings:

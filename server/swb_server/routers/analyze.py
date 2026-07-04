@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -12,7 +11,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal, get_db
-from ..models import Finding, Run
+from ..models import Finding, FindingIdentity, Run
+from ..verdicts import write_verdict
 from ..ai.prompts import PROMPTS, build_user_message, parse_response
 from ..ai.providers import call_llm
 
@@ -56,7 +56,9 @@ async def analyze_run(
         with SessionLocal() as session:
             q = session.query(Finding).filter(Finding.run_id == run_id)
             if req.only_unmarked:
-                q = q.filter(Finding.verdict == "unmarked")
+                q = q.join(FindingIdentity, Finding.identity_id == FindingIdentity.id).filter(
+                    FindingIdentity.verdict == "unmarked"
+                )
             findings = q.all()
 
             total = len(findings)
@@ -109,23 +111,18 @@ async def analyze_run(
                         i + 1, total, verdict, rationale,
                     )
 
-                    finding.verdict = verdict
-                    finding.rationale = rationale
-                    finding.verdict_source = "ai"
-                    finding.provider = req.provider
-                    finding.model_version = req.model
-                    finding.needs_reconfirm = False
-
-                    history = list(finding.verdict_history or [])
-                    history.append({
-                        "verdict": verdict,
-                        "rationale": rationale,
-                        "source": "ai",
-                        "provider": req.provider,
-                        "model": req.model,
-                        "ts": datetime.utcnow().isoformat(),
-                    })
-                    finding.verdict_history = history
+                    # prompt_id/prompt_version в событии заполняет T-25 (пока NULL)
+                    write_verdict(
+                        session,
+                        finding.identity,
+                        new_verdict=verdict,
+                        source="ai",
+                        actor=f"ai:{req.provider}/{req.model}",
+                        rationale=rationale,
+                        provider=req.provider,
+                        model=req.model,
+                        run_id=run_id,
+                    )
 
                     session.commit()
                     logger.debug("[analyze] [%d/%d] committed to DB", i + 1, total)
@@ -164,7 +161,7 @@ async def analyze_run(
                 all_findings = session.query(Finding).filter(Finding.run_id == run_id).all()
                 cvd: dict[str, int] = {"true_positive": 0, "false_positive": 0, "uncertain": 0, "unmarked": 0}
                 for f in all_findings:
-                    k = f.verdict or "unmarked"
+                    k = (f.identity.verdict if f.identity else None) or "unmarked"
                     cvd[k] = cvd.get(k, 0) + 1
                 run_obj.counts_by_verdict = cvd
                 session.commit()

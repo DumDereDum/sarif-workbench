@@ -44,7 +44,7 @@ export interface FindingItem {
   id: string; swb_id: string; occurrence: number
   severity: string; rule_id: string; rule_name: string; cwe: string | null
   uri: string; start_line: number; scope: string | null; message: string
-  verdict: string; verdict_source: string | null; confidence: number | null; lang: string | null
+  verdict: string; verdict_source: string | null; lang: string | null
 }
 
 export interface FindingsPage {
@@ -56,7 +56,7 @@ export interface Snippet {
 }
 
 export interface VerdictObj {
-  verdict: string; source: string | null; confidence: number | null; rationale: string | null
+  verdict: string; source: string | null; rationale: string | null
   provider: string | null; needs_reconfirm: boolean
   history: Array<{ verdict: string; source: string | null; at: string }>
 }

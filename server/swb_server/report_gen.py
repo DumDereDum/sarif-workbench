@@ -308,7 +308,7 @@ def _cover(run: Any, project: Any, total: int) -> str:
 def _toc(findings: list[Any]) -> str:
     rows = ""
     for i, f in enumerate(findings, 1):
-        vd  = f.verdict or "unmarked"
+        vd  = (f.identity.verdict if f.identity else None) or "unmarked"
         lbl = _VD_LABEL.get(vd, vd)
         bg  = _VD_BG.get(vd, "#555")
         rows += f"""
@@ -346,8 +346,9 @@ def _code_rows(f: Any) -> str:
 # ── Finding page ──────────────────────────────────────────────────────────────
 
 def _finding_page(f: Any, idx: int, total: int) -> str:
-    # --- базовые данные ---
-    vd      = f.verdict or "unmarked"
+    # --- базовые данные --- (вердикт живёт на identity — T-14)
+    identity = f.identity
+    vd      = (identity.verdict if identity else None) or "unmarked"
     vd_lbl  = _VD_LABEL.get(vd, vd)
     vd_bg   = _VD_BG.get(vd, "#555555")
 
@@ -367,12 +368,12 @@ def _finding_page(f: Any, idx: int, total: int) -> str:
     # Автор / дата / источник
     vd_at  = _fmt_date(f.verdict_at.isoformat() if getattr(f, "verdict_at", None) else None)
     src_map = {"ai": "Автоматическая верификация", "manual": "Ручная верификация"}
-    author  = src_map.get(f.verdict_source or "", "")
+    author  = src_map.get((identity.verdict_source if identity else None) or "", "")
     author_cell = author
     if vd_at:
         author_cell += f"\n({vd_at})"
 
-    rationale = f.rationale or "—"
+    rationale = (identity.rationale if identity else None) or "—"
 
     # --- heading ---
     heading = f"{idx}. {_h(f.rule_id or '—')}"

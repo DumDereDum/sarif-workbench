@@ -217,18 +217,6 @@ function VerdictCard({ verdict }: { verdict: ReturnType<typeof normalizeDetail>[
           </span>
         )}
       </div>
-      {verdict.confidence != null && (
-        <div className="conf">
-          <span className="clab">Уверенность</span>
-          <span className="track">
-            <span className="fill" style={{
-              width: `${verdict.confidence}%`,
-              background: verdict.confidence >= 70 ? 'var(--ok)' : verdict.confidence >= 50 ? 'var(--med)' : 'var(--high)',
-            }} />
-          </span>
-          <span className="pct">{verdict.confidence}%</span>
-        </div>
-      )}
       {verdict.rationale && <div className="rationale">{verdict.rationale}</div>}
     </div>
   )

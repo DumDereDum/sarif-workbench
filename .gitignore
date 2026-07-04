@@ -237,6 +237,7 @@ server/data/
 # Web build output
 web/dist/
 web/node_modules/
+web/tsconfig.tsbuildinfo
 
 # Docker env overrides
 .env

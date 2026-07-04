@@ -1,14 +1,39 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Finding, Run
+from ..models import Finding, FindingIdentity, Run, VerdictEvent
+from ..verdicts import write_verdict
 
 router = APIRouter(prefix="/api/v1")
 
 _VALID_VERDICTS = {"true_positive", "false_positive", "uncertain", "unmarked"}
+
+
+def _history(db: Session, identity: FindingIdentity | None) -> list[dict]:
+    """События identity в хронологическом порядке, в прежней форме ответа."""
+    if identity is None:
+        return []
+    events = (
+        db.query(VerdictEvent)
+        .filter(VerdictEvent.identity_id == identity.id)
+        .order_by(VerdictEvent.at, VerdictEvent.id)
+        .all()
+    )
+    return [
+        {
+            "verdict": e.new_verdict,
+            "old_verdict": e.old_verdict,
+            "source": e.source,
+            "actor": e.actor,
+            "rationale": e.rationale,
+            "provider": e.provider,
+            "model": e.model,
+            "run_id": e.run_id,
+            "at": e.at.isoformat() if e.at else None,
+        }
+        for e in events
+    ]
 
 
 @router.get("/findings/{finding_id}")
@@ -27,6 +52,7 @@ def get_finding(finding_id: str, db: Session = Depends(get_db)):
             "hot_line": f.start_line,
         }
 
+    identity = f.identity
     return {
         "id": f.id,
         "swb_id": f.swb_id,
@@ -46,15 +72,14 @@ def get_finding(finding_id: str, db: Session = Depends(get_db)):
         "code_flow": f.code_flow,
         "git": f.git,
         "verdict": {
-            "verdict": f.verdict,
-            "source": f.verdict_source,
-            "confidence": f.confidence,
-            "rationale": f.rationale,
-            "provider": f.provider,
-            "model_version": f.model_version,
-            "prompt_version": f.prompt_version,
-            "needs_reconfirm": f.needs_reconfirm or False,
-            "history": f.verdict_history or [],
+            "verdict": identity.verdict if identity else "unmarked",
+            "source": identity.verdict_source if identity else None,
+            "rationale": identity.rationale if identity else None,
+            "provider": identity.provider if identity else None,
+            "model_version": identity.model if identity else None,
+            "prompt_version": identity.prompt_version if identity else None,
+            "needs_reconfirm": (identity.needs_reconfirm if identity else False) or False,
+            "history": _history(db, identity),
         },
     }
 
@@ -71,34 +96,29 @@ def update_verdict(finding_id: str, body: dict, db: Session = Depends(get_db)):
 
     rationale = body.get("rationale", "")
 
-    # Append old verdict to history
-    history = list(f.verdict_history or [])
-    if f.verdict and f.verdict != "unmarked":
-        history.append({
-            "verdict": f.verdict,
-            "source": f.verdict_source,
-            "at": datetime.now(timezone.utc).isoformat(),
-        })
-
-    f.verdict = verdict
-    f.verdict_source = "human"
-    f.rationale = rationale
-    f.confidence = None
-    f.verdict_history = history
+    identity = f.identity
+    write_verdict(
+        db,
+        identity,
+        new_verdict=verdict,
+        source="human",
+        actor="human",
+        rationale=rationale,
+    )
 
     # Recount counts_by_verdict on the run
     run = db.query(Run).filter(Run.id == f.run_id).first()
     if run:
         cvd = {"true_positive": 0, "false_positive": 0, "uncertain": 0, "unmarked": 0}
         for ff in db.query(Finding).filter(Finding.run_id == run.id).all():
-            v = verdict if ff.id == finding_id else (ff.verdict or "unmarked")
+            v = (ff.identity.verdict if ff.identity else None) or "unmarked"
             cvd[v] = cvd.get(v, 0) + 1
         run.counts_by_verdict = cvd
 
     db.commit()
     return {
-        "verdict": f.verdict,
-        "source": f.verdict_source,
-        "rationale": f.rationale,
-        "history": f.verdict_history,
+        "verdict": identity.verdict,
+        "source": identity.verdict_source,
+        "rationale": identity.rationale,
+        "history": _history(db, identity),
     }
