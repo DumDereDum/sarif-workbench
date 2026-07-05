@@ -291,7 +291,7 @@ def test_reset_unmarks_identities_but_keeps_events(client, db_session, upload_ru
 
     resp = client.post(f"/api/v1/runs/{run['run_id']}/reset")
     assert resp.status_code == 200
-    assert resp.json() == {"reset": 2}
+    assert resp.json() == {"reset": 1}
 
     # снапшоты identity сброшены в unmarked
     finding = db_session.query(Finding).filter(Finding.id == finding_id).first()

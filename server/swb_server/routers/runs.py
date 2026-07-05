@@ -427,6 +427,7 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
     # Сброс снапшотов identity, встречающихся в ране, через writer-одиночку;
     # события journal'а append-only — не удаляются (ADR 0001 §6)
     seen: set[str] = set()
+    reset_count = 0
     for f in findings:
         identity = f.identity
         if identity is None or identity.id in seen:
@@ -441,6 +442,7 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
                 actor="system",
                 run_id=run_id,
             )
+            reset_count += 1
 
     total = len(findings)
     run.counts_by_verdict = {
@@ -450,7 +452,7 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
         "unmarked": total,
     }
     db.commit()
-    return {"reset": total}
+    return {"reset": reset_count}
 
 
 @router.get("/runs/{run_id}/sarif")
