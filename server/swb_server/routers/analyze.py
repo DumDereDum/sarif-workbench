@@ -48,8 +48,11 @@ async def analyze_run(
         if not req.custom_system:
             raise HTTPException(422, {"error": "missing_prompt", "message": "custom_system is required when prompt_id=custom"})
         system_prompt = req.custom_system
+        # T-25: произвольный промпт с лёту не зарегистрирован — у него нет и не может быть версии.
+        prompt_version = None
     elif req.prompt_id in PROMPTS:
         system_prompt = PROMPTS[req.prompt_id]["system"]
+        prompt_version = PROMPTS[req.prompt_id]["version"]
     else:
         raise HTTPException(422, {"error": "unknown_prompt", "message": f"Unknown prompt_id: {req.prompt_id!r}"})
 
@@ -129,7 +132,6 @@ async def analyze_run(
                         i + 1, total, verdict, rationale,
                     )
 
-                    # prompt_id/prompt_version в событии заполняет T-25 (пока NULL)
                     write_verdict(
                         session,
                         finding.identity,
@@ -139,6 +141,8 @@ async def analyze_run(
                         rationale=rationale,
                         provider=req.provider,
                         model=req.model,
+                        prompt_id=req.prompt_id,
+                        prompt_version=prompt_version,
                         run_id=run_id,
                     )
 

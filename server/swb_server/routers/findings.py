@@ -29,6 +29,8 @@ def _history(db: Session, identity: FindingIdentity | None) -> list[dict]:
             "rationale": e.rationale,
             "provider": e.provider,
             "model": e.model,
+            "prompt_id": e.prompt_id,
+            "prompt_version": e.prompt_version,
             "run_id": e.run_id,
             "at": e.at.isoformat() if e.at else None,
         }
@@ -80,6 +82,7 @@ def get_finding(finding_id: str, db: Session = Depends(get_db)):
             "rationale": identity.rationale if identity else None,
             "provider": identity.provider if identity else None,
             "model_version": identity.model if identity else None,
+            "prompt_id": identity.prompt_id if identity else None,
             "prompt_version": identity.prompt_version if identity else None,
             "needs_reconfirm": (identity.needs_reconfirm if identity else False) or False,
             "history": _history(db, identity),

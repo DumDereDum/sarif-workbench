@@ -47,18 +47,21 @@ Severity: Minor
 "По логике работы... значение всегда инициализировано...".\
 """
 
+# version: фиксированная версия текста system-промпта; менять руками при правке текста (T-25).
 PROMPTS = {
     "honest": {
         "id": "honest",
         "label": "Честный анализ",
         "description": "ИИ выносит настоящий вердикт: TP / FP / Uncertain",
         "system": HONEST_SYSTEM,
+        "version": "1",
     },
     "force_fp": {
         "id": "force_fp",
         "label": "Все — False Positive",
         "description": "Принудительно размечает все находки как FP с формальным комментарием",
         "system": FORCE_FP_SYSTEM,
+        "version": "1",
     },
 }
 
