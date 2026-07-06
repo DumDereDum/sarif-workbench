@@ -62,7 +62,11 @@ def write_verdict(
 
     # Снапшот текущего состояния (денормализация; источник истины — события)
     identity.verdict = new_verdict
-    identity.verdict_source = source
+    # carried не меняет, кто принял решение по существу (T-27, ADR 0001 §6):
+    # это лишь подтверждение прежнего вердикта в новом скане, поэтому снапшот
+    # verdict_source остаётся тем, чем был (human/ai/reset), не "carried".
+    if source != "carried":
+        identity.verdict_source = source
     identity.rationale = rationale
     if source == "ai":
         identity.provider = provider

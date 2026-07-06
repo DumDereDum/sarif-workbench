@@ -38,7 +38,7 @@ def test_carry_over_verdict_survives_new_run(client, db_session, upload_run):
     items = client.get(f"/api/v1/runs/{run_b['run_id']}/findings").json()["items"]
     by_swb = {it["swb_id"]: it for it in items}
     assert by_swb[swb_id]["verdict"] == "true_positive"
-    assert by_swb[swb_id]["verdict_source"] == "carried"
+    assert by_swb[swb_id]["verdict_source"] == "human"
     unmatched = [it for it in items if it["swb_id"] != swb_id]
     assert len(unmatched) == 1
     assert unmatched[0]["verdict"] == "unmarked"
@@ -74,7 +74,7 @@ def test_carry_over_verdict_survives_new_run(client, db_session, upload_run):
     # Снапшот identity: rationale не затёрт переносом
     assert identity.rationale == "confirmed"
     assert identity.verdict == "true_positive"
-    assert identity.verdict_source == "carried"
+    assert identity.verdict_source == "human"
 
 
 def test_unmarked_identity_reappearing_gets_no_carried_event(client, db_session, upload_run):
