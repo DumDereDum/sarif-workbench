@@ -6,10 +6,13 @@ import os
 import re
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..db import get_db
 from ..ingest import MetaValidationError, ingest
@@ -20,9 +23,44 @@ from ..verdicts import write_verdict
 router = APIRouter(prefix="/api/v1")
 
 _SEV_ORDER = ["critical", "high", "medium", "low", "note"]
+_VERDICT_ORDER = ["true_positive", "false_positive", "uncertain", "unmarked"]
+
+# Колонки находки, по которым можно сортировать напрямую (белый список — не
+# пропускаем произвольные имена полей в ORDER BY). "file" — алиас uri, как и
+# раньше в python-реализации.
+_SORT_COLUMNS: dict[str, ColumnElement] = {
+    "rule_id": Finding.rule_id,
+    "rule_name": Finding.rule_name,
+    "cwe": Finding.cwe,
+    "uri": Finding.uri,
+    "file": Finding.uri,
+    "start_line": Finding.start_line,
+    "end_line": Finding.end_line,
+    "message": Finding.message,
+    "scope": Finding.scope,
+    "lang": Finding.lang,
+    "swb_id": Finding.swb_id,
+    "occurrence": Finding.occurrence,
+}
 
 _DEFAULT_MAX_UPLOAD_MB = 50
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _severity_order_expr() -> ColumnElement:
+    """CASE, эмулирующий смысловой порядок _SEV_ORDER (critical>...>note) в SQL."""
+    return case(
+        *[(Finding.severity == s, i) for i, s in enumerate(_SEV_ORDER)],
+        else_=len(_SEV_ORDER),
+    )
+
+
+def _verdict_order_expr() -> ColumnElement:
+    """CASE, эмулирующий порядок _VERDICT_ORDER в SQL (требует join с FindingIdentity)."""
+    return case(
+        *[(FindingIdentity.verdict == v, i) for i, v in enumerate(_VERDICT_ORDER)],
+        else_=len(_VERDICT_ORDER),
+    )
 
 
 def _max_upload_mb() -> int:
@@ -277,12 +315,16 @@ def list_findings(
 
     query = db.query(Finding).filter(Finding.run_id == run_id)
 
+    # join с FindingIdentity нужен и для фильтра по вердикту, и для сортировки
+    # по нему — делаем один раз, не дублируя join.
+    needs_identity_join = bool(verdict) or sort == "verdict"
+    if needs_identity_join:
+        query = query.join(FindingIdentity, Finding.identity_id == FindingIdentity.id)
+
     if severity:
         query = query.filter(Finding.severity.in_([s.strip() for s in severity.split(",")]))
     if verdict:
-        query = query.join(FindingIdentity, Finding.identity_id == FindingIdentity.id).filter(
-            FindingIdentity.verdict.in_([v.strip() for v in verdict.split(",")])
-        )
+        query = query.filter(FindingIdentity.verdict.in_([v.strip() for v in verdict.split(",")]))
     if rule:
         query = query.filter(Finding.rule_id.contains(rule))
     if cwe:
@@ -298,26 +340,29 @@ def list_findings(
             | Finding.scope.like(like)
         )
 
-    all_findings = query.all()
+    # total считается SQL COUNT по тому же (отфильтрованному) запросу — до
+    # сортировки/пагинации, чтобы не грузить находки в Python ради счёта.
+    total = query.count()
 
-    # Sort
-    def sort_key(f: Finding):
-        if sort == "severity":
-            return _SEV_ORDER.index(f.severity) if f.severity in _SEV_ORDER else 99
-        if sort == "verdict":
-            order = ["true_positive", "false_positive", "uncertain", "unmarked"]
-            v = f.identity.verdict if f.identity else "unmarked"
-            return order.index(v) if v in order else 99
-        if sort == "file":
-            return f.uri or ""
-        return getattr(f, sort, "") or ""
+    if sort == "severity":
+        order_expr = _severity_order_expr()
+    elif sort == "verdict":
+        order_expr = _verdict_order_expr()
+    else:
+        # Неизвестное имя сортировки не должно превращаться в SQL-инъекцию —
+        # только из белого списка; иначе — детерминированный fallback на id.
+        order_expr = _SORT_COLUMNS.get(sort, Finding.id)
 
-    reverse = dir == "desc"
-    all_findings.sort(key=sort_key, reverse=reverse)
+    order_expr = order_expr.desc() if dir == "desc" else order_expr.asc()
+    # Finding.id — вторичный тай-брейкер: без него страницы могут
+    # пересекаться/терять записи при равных значениях основного поля сортировки
+    # (LIMIT/OFFSET без детерминированного порядка не гарантирует стабильность).
+    query = query.order_by(order_expr, Finding.id.asc())
 
-    total = len(all_findings)
+    page = max(page, 1)
+    page_size = max(page_size, 1)
     offset = (page - 1) * page_size
-    page_findings = all_findings[offset : offset + page_size]
+    page_findings = query.offset(offset).limit(page_size).all()
 
     return {
         "total": total,
@@ -332,34 +377,62 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
     if not db.query(Run).filter(Run.id == run_id).first():
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
 
-    findings = db.query(Finding).filter(Finding.run_id == run_id).all()
-    counts: dict[str, dict] = {}
+    base = db.query(Finding).filter(Finding.run_id == run_id)
+    count_expr = func.count(Finding.id)
+    groups: list[dict]
+    # аннотация нужна явно: ветки ниже возвращают Row разной формы (2- и
+    # 3-колоночные) — без неё mypy сузил бы тип rows по первой ветке.
+    rows: list[Any]
 
-    for f in findings:
-        if by == "severity":
-            key = f.severity or "note"
-            label = key.capitalize()
-        elif by == "verdict":
-            key = (f.identity.verdict if f.identity else None) or "unmarked"
-            label = key
-        elif by == "rule":
-            key = f.rule_id or ""
-            label = f"{key} {f.rule_name or ''}".strip()
-        elif by == "file":
-            key = f.uri or ""
-            label = key
-        elif by == "cwe":
-            key = f.cwe or f.rule_id or ""
-            label = key
-        else:
-            key = f.severity or "note"
-            label = key
+    if by == "verdict":
+        key_expr = func.coalesce(FindingIdentity.verdict, "unmarked")
+        rows = (
+            base.join(FindingIdentity, Finding.identity_id == FindingIdentity.id)
+            .with_entities(key_expr.label("key"), count_expr.label("count"))
+            .group_by(key_expr)
+            .all()
+        )
+        groups = [{"key": key, "label": key, "count": count} for key, count in rows]
+    elif by == "rule":
+        key_expr = func.coalesce(Finding.rule_id, "")
+        name_expr = func.min(Finding.rule_name)
+        rows = (
+            base.with_entities(key_expr.label("key"), name_expr.label("name"), count_expr.label("count"))
+            .group_by(key_expr)
+            .all()
+        )
+        groups = [
+            {"key": key, "label": f"{key} {name or ''}".strip(), "count": count}
+            for key, name, count in rows
+        ]
+    elif by == "file":
+        key_expr = func.coalesce(Finding.uri, "")
+        rows = (
+            base.with_entities(key_expr.label("key"), count_expr.label("count"))
+            .group_by(key_expr)
+            .all()
+        )
+        groups = [{"key": key, "label": key, "count": count} for key, count in rows]
+    elif by == "cwe":
+        key_expr = func.coalesce(Finding.cwe, Finding.rule_id, "")
+        rows = (
+            base.with_entities(key_expr.label("key"), count_expr.label("count"))
+            .group_by(key_expr)
+            .all()
+        )
+        groups = [{"key": key, "label": key, "count": count} for key, count in rows]
+    else:
+        # "severity" и любое нераспознанное значение `by` — прежнее поведение.
+        key_expr = func.coalesce(Finding.severity, "note")
+        rows = (
+            base.with_entities(key_expr.label("key"), count_expr.label("count"))
+            .group_by(key_expr)
+            .all()
+        )
+        label_fn = (lambda k: k.capitalize()) if by == "severity" else (lambda k: k)
+        groups = [{"key": key, "label": label_fn(key), "count": count} for key, count in rows]
 
-        if key not in counts:
-            counts[key] = {"key": key, "label": label, "count": 0}
-        counts[key]["count"] += 1
-
-    groups = sorted(counts.values(), key=lambda x: -x["count"])
+    groups.sort(key=lambda x: -x["count"])
     return {"by": by, "groups": groups}
 
 
