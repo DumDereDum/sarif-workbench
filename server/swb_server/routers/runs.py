@@ -18,7 +18,7 @@ from ..db import get_db
 from ..ingest import MetaValidationError, ingest
 from ..models import Finding, FindingIdentity, Project, Rule, Run
 from ..storage import load_blob, save_blob
-from ..verdicts import write_verdict
+from ..verdicts import recompute_counts_by_verdict, write_verdict
 
 router = APIRouter(prefix="/api/v1")
 
@@ -215,7 +215,6 @@ async def upload_run(
     # Findings: find-or-create identity по (project_id, swb_id) — ADR 0001 §6
     now = datetime.utcnow()
     identities: dict[str, FindingIdentity] = {}
-    cvd = {"true_positive": 0, "false_positive": 0, "uncertain": 0, "unmarked": 0}
     for fd in ingested["findings"]:
         algo = fd.pop("fingerprint_algo")
         level = fd.pop("fingerprint_level")
@@ -256,11 +255,13 @@ async def upload_run(
             identities[swb_id] = identity
         identity.last_seen_run_id = run_id
         identity.last_seen_at = now
-        v = identity.verdict or "unmarked"
-        cvd[v] = cvd.get(v, 0) + 1
         db.add(Finding(run_id=run_id, identity_id=identity.id, **fd))
 
-    run.counts_by_verdict = cvd
+    # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
+    # flush() нужен явно: Finding-строки выше только добавлены в сессию
+    # (autoflush=False), а агрегатный запрос читает из БД напрямую.
+    db.flush()
+    recompute_counts_by_verdict(db, run_id)
     db.commit()
 
     return {
@@ -517,13 +518,8 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
             )
             reset_count += 1
 
-    total = len(findings)
-    run.counts_by_verdict = {
-        "true_positive": 0,
-        "false_positive": 0,
-        "uncertain": 0,
-        "unmarked": total,
-    }
+    # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
+    recompute_counts_by_verdict(db, run_id)
     db.commit()
     return {"reset": reset_count}
 

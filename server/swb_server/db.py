@@ -25,7 +25,13 @@ class Base(DeclarativeBase):
 
 def _make_engine():
     url = _database_url()
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+    # T-32: конкурентные писатели (напр. параллельные PATCH /verdict) сериализуются
+    # самим SQLite через файловую блокировку (единственный RESERVED-holder за раз) —
+    # это и есть механизм сериализации read-modify-write для counts_by_verdict, без
+    # отдельного прикладного лока. Дефолтный busy-timeout sqlite3 (5s) может не
+    # хватить, чтобы дождаться своей очереди под ~20 одновременными PATCH — вместо
+    # немедленной ошибки "database is locked" даём больше времени на ожидание.
+    connect_args = {"check_same_thread": False, "timeout": 30} if url.startswith("sqlite") else {}
     return create_engine(url, connect_args=connect_args)
 
 

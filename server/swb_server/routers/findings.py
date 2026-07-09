@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Finding, FindingIdentity, Run, VerdictEvent
-from ..verdicts import write_verdict
+from ..models import Finding, FindingIdentity, VerdictEvent
+from ..verdicts import recompute_counts_by_verdict, write_verdict
 
 router = APIRouter(prefix="/api/v1")
 
@@ -112,14 +112,8 @@ def update_verdict(finding_id: str, body: dict, db: Session = Depends(get_db)):
         rationale=rationale,
     )
 
-    # Recount counts_by_verdict on the run
-    run = db.query(Run).filter(Run.id == f.run_id).first()
-    if run:
-        cvd = {"true_positive": 0, "false_positive": 0, "uncertain": 0, "unmarked": 0}
-        for ff in db.query(Finding).filter(Finding.run_id == run.id).all():
-            v = (ff.identity.verdict if ff.identity else None) or "unmarked"
-            cvd[v] = cvd.get(v, 0) + 1
-        run.counts_by_verdict = cvd
+    # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
+    recompute_counts_by_verdict(db, f.run_id)
 
     db.commit()
     return {

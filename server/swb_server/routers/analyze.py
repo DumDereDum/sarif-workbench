@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal, get_db
 from ..models import Finding, FindingIdentity, Run
-from ..verdicts import write_verdict
+from ..verdicts import recompute_counts_by_verdict, write_verdict
 from ..ai.prompts import PROMPTS, build_user_message, parse_response
 from ..ai.providers import call_llm
 
@@ -132,9 +132,37 @@ async def analyze_run(
                         i + 1, total, verdict, rationale,
                     )
 
+                    # T-32 (остаточный риск T-24): между постановкой в очередь этой
+                    # находки и получением ответа LLM прошло сетевое время — за это
+                    # время человек мог поставить свой вердикт через PATCH. Проверка
+                    # verdict_source на входе в батч (выше) этого не ловит (TOCTOU):
+                    # перечитываем identity непосредственно перед записью, не
+                    # полагаясь на объект, загруженный/закэшированный на входе.
+                    identity = finding.identity
+                    if not req.override:
+                        session.refresh(identity)
+                        if identity.verdict_source == "human" and identity.verdict != "unmarked":
+                            skipped_human += 1
+                            logger.info(
+                                "[analyze] [%d/%d] finding=%s SKIPPED — concurrent human verdict "
+                                "landed while waiting on LLM response",
+                                i + 1, total, finding.id,
+                            )
+                            yield _event({
+                                "type": "progress",
+                                "done": i + 1,
+                                "total": total,
+                                "tokens_total": tokens_total,
+                                "finding_id": finding.id,
+                                "verdict": identity.verdict,
+                                "rationale": identity.rationale,
+                                "skipped_human": True,
+                            })
+                            continue
+
                     write_verdict(
                         session,
-                        finding.identity,
+                        identity,
                         new_verdict=verdict,
                         source="ai",
                         actor=f"ai:{req.provider}/{req.model}",
@@ -177,17 +205,10 @@ async def analyze_run(
                         "message": msg,
                     })
 
-            # Recount verdict summary on the run
-            run_obj = session.query(Run).filter(Run.id == run_id).first()
-            if run_obj:
-                all_findings = session.query(Finding).filter(Finding.run_id == run_id).all()
-                cvd: dict[str, int] = {"true_positive": 0, "false_positive": 0, "uncertain": 0, "unmarked": 0}
-                for f in all_findings:
-                    k = (f.identity.verdict if f.identity else None) or "unmarked"
-                    cvd[k] = cvd.get(k, 0) + 1
-                run_obj.counts_by_verdict = cvd
-                session.commit()
-                logger.info("[analyze] DONE run_id=%s  counts=%s  tokens_total=%d", run_id, cvd, tokens_total)
+            # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
+            cvd = recompute_counts_by_verdict(session, run_id)
+            session.commit()
+            logger.info("[analyze] DONE run_id=%s  counts=%s  tokens_total=%d", run_id, cvd, tokens_total)
 
             yield _event({
                 "type": "done", "done": total, "total": total,
