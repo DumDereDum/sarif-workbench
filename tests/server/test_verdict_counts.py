@@ -103,7 +103,7 @@ def mock_llm_cycle(monkeypatch):
         state["n"] += 1
         return {"content": f"Verdict: {v}\nRationale: mock-{v}", "tokens": 1}
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_call_llm)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
 
 def _actual_counts_from_db(db_session, run_id: str) -> dict[str, int]:
@@ -208,7 +208,7 @@ def test_analyze_toctou_recheck_protects_finding_patched_mid_batch(client, db_se
             db_session.commit()
         return {"content": "Verdict: false_positive\nRationale: ai-would-override", "tokens": 3}
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_call_llm)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
     resp = client.post(
         f"/api/v1/runs/{run['run_id']}/analyze",

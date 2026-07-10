@@ -4,8 +4,8 @@
 принудительного force_fp по prompt_id, а произвольный custom-промпт,
 введённый на лету, не получает версии (не зарегистрирован в PROMPTS).
 
-LLM замокан (monkeypatch call_llm в неймспейсе модуля analyze) — наружу
-ничего не уходит.
+LLM замокан (monkeypatch call_llm в неймспейсе доменного цикла
+swb_server.ai.analyze_loop — см. T-37) — наружу ничего не уходит.
 """
 import json
 import uuid
@@ -43,7 +43,7 @@ def mock_llm_honest(monkeypatch):
     async def _fake_call_llm(provider, api_key, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: замокано (honest)", "tokens": 5}
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_call_llm)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
 
 @pytest.fixture()
@@ -61,7 +61,7 @@ def mock_llm_force_fp(monkeypatch):
             "tokens": 7,
         }
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_call_llm)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
 
 def test_honest_prompt_writes_id_and_version(client, db_session, upload_run, mock_llm_honest):
@@ -142,7 +142,7 @@ def test_honest_and_force_fp_false_positive_distinguishable_via_api(client, db_s
     run_force = upload_run([{"rule_id": "CWE-89", "uri": "src/db.py", "start_line": 42}], repo=repo_force)
     finding_force_id = _first_finding_id(client, run_force["run_id"])
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_honest)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_honest)
     _analyze(client, run_honest["run_id"], prompt_id="honest")
 
     resp_honest = client.get(f"/api/v1/findings/{finding_honest_id}")
@@ -151,7 +151,7 @@ def test_honest_and_force_fp_false_positive_distinguishable_via_api(client, db_s
     assert vd_honest["verdict"] == "false_positive"
     assert vd_honest["prompt_id"] == "honest"
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_force_fp)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_force_fp)
     _analyze(client, run_force["run_id"], prompt_id="force_fp")
 
     resp_force = client.get(f"/api/v1/findings/{finding_force_id}")

@@ -1,7 +1,9 @@
 """T-24: AI-анализ не перезаписывает human-вердикт без явного override.
 
-LLM замокан (monkeypatch call_llm в неймспейсе модуля analyze) — наружу
-ничего не уходит. Ответ мока — в формате промпта honest.
+LLM замокан (monkeypatch call_llm в неймспейсе доменного цикла
+`swb_server.ai.analyze_loop`, куда он импортирован для использования в
+цикле анализа — см. T-37) — наружу ничего не уходит. Ответ мока — в формате
+промпта honest.
 """
 import json
 import uuid
@@ -45,7 +47,7 @@ def mock_llm(monkeypatch):
     async def _fake_call_llm(provider, api_key, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: замокано", "tokens": 5}
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_call_llm)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
 
 def test_analyze_default_does_not_touch_human_verdict(client, db_session, upload_run, mock_llm):

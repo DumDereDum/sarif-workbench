@@ -31,6 +31,8 @@ interface Progress {
   errors: number
   lastVerdict?: string
   errorLog: ErrorEntry[]
+  stoppedReason?: string
+  stopMessage?: string
 }
 
 const PROVIDERS = [
@@ -192,7 +194,16 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
 
             if (ev.type === 'done') {
               finished = true
-              setProgress(p => ({ ...p, done: ev.done, total: ev.total, tokens: ev.tokens_total }))
+              setProgress(p => ({
+                ...p,
+                done: ev.done,
+                total: ev.total,
+                tokens: ev.tokens_total,
+                // T-37: цикл на сервере мог остановиться досрочно (circuit breaker
+                // на подряд идущих ошибках провайдера) — сообщаем причину пользователю.
+                stoppedReason: ev.stopped_reason,
+                stopMessage: ev.message,
+              }))
               qc.invalidateQueries({ queryKey: ['findings', runId] })
               qc.invalidateQueries({ queryKey: ['run', runId] })
               setStep('done')
@@ -396,7 +407,18 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
                 <circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <div className="done-title">Анализ завершён</div>
+            <div className="done-title">
+              {progress.stoppedReason ? 'Анализ остановлен досрочно' : 'Анализ завершён'}
+            </div>
+            {progress.stoppedReason && (
+              <div className="form-error" style={{ width: '100%' }}>
+                {progress.stopMessage ?? (
+                  progress.stoppedReason === 'circuit_breaker'
+                    ? 'Слишком много ошибок провайдера подряд — анализ остановлен.'
+                    : 'Соединение прервано — анализ остановлен.'
+                )}
+              </div>
+            )}
             <div className="done-stats">
               <div className="done-stat">
                 <span className="done-n">{progress.done}</span>

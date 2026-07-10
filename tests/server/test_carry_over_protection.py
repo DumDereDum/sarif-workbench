@@ -41,7 +41,7 @@ def mock_llm(monkeypatch):
     async def _fake_call_llm(provider, api_key, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: замокано", "tokens": 5}
 
-    monkeypatch.setattr("swb_server.routers.analyze.call_llm", _fake_call_llm)
+    monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
 
 def test_verdict_source_survives_single_carry_over(client, db_session, upload_run):
