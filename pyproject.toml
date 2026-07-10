@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["cli", "server"]
+members = ["cli", "server", "contract"]

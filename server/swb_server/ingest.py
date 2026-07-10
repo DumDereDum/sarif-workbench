@@ -5,35 +5,7 @@ import json
 import re
 from typing import Any
 
-_SEV_ORDER = ["critical", "high", "medium", "low", "note"]
-
-_LEVEL_MAP = {
-    "error": "high",
-    "warning": "medium",
-    "note": "low",
-    "none": "note",
-}
-
-
-def _sec_sev_to_enum(score: float) -> str:
-    if score >= 9.0:
-        return "critical"
-    if score >= 7.0:
-        return "high"
-    if score >= 4.0:
-        return "medium"
-    if score > 0:
-        return "low"
-    return "note"
-
-
-def _map_severity(security_severity: Any, level: str) -> str:
-    if security_severity is not None:
-        try:
-            return _sec_sev_to_enum(float(security_severity))
-        except (TypeError, ValueError):
-            pass
-    return _LEVEL_MAP.get(str(level).lower(), "note")
+from swb_contract.severity import SEV_ORDER, map_severity
 
 
 def _extract_cwe(rule_id: str, tags: list[str]) -> str | None:
@@ -98,7 +70,7 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
             "name": rule.get("name", "") or rid,
             "description": _text(rule.get("fullDescription") or rule.get("shortDescription")),
             "help_uri": rule.get("helpUri"),
-            "default_severity": _map_severity(sec_sev, level),
+            "default_severity": map_severity(sec_sev, level),
             "security_severity": sec_sev,
             "cwe": _extract_cwe(rid, tags),
         }
@@ -109,7 +81,7 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         for rj, result in enumerate(srun.get("results", [])):
             results_map[(ri, rj)] = result
 
-    counts = {s: 0 for s in _SEV_ORDER}
+    counts = {s: 0 for s in SEV_ORDER}
     counts["all"] = 0
     findings_out: list[dict] = []
 
@@ -136,7 +108,7 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
 
         message = _text(sarif_result.get("message", ""))
         level = sarif_result.get("level", "warning")
-        severity = _map_severity(rule_info.get("security_severity"), level)
+        severity = map_severity(rule_info.get("security_severity"), level)
         cwe = rule_info.get("cwe") or _extract_cwe(rule_id, [])
 
         fps = mf.get("fingerprints", {})

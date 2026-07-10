@@ -8,14 +8,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
-# Layer cache: rebuild only when pyproject.toml changes.
-# Stub lets pip install deps without the full source tree.
-COPY pyproject.toml .
-RUN mkdir -p swb_server && touch swb_server/__init__.py && \
-    pip install --no-cache-dir -e . && \
-    rm swb_server/__init__.py
+# Build context is the repo root (T-34: server depends on the workspace-local
+# swb-contract package, which lives outside server/ — see contract/).
+#
+# Layer cache: rebuild only when either pyproject.toml changes.
+# Stubs let pip install deps/editable-metadata without the full source tree.
+COPY contract/pyproject.toml contract/pyproject.toml
+COPY server/pyproject.toml server/pyproject.toml
+RUN mkdir -p contract/swb_contract server/swb_server && \
+    touch contract/swb_contract/__init__.py server/swb_server/__init__.py && \
+    pip install --no-cache-dir -e ./contract -e ./server && \
+    rm contract/swb_contract/__init__.py server/swb_server/__init__.py
 
-COPY swb_server/ swb_server/
+COPY contract/swb_contract/ contract/swb_contract/
+COPY server/swb_server/ server/swb_server/
 
 ENV DATA_DIR=/data
 EXPOSE 8000

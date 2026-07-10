@@ -5,11 +5,12 @@
 services:
   server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     command: uvicorn swb_server.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
-      - ./server/swb_server:/app/swb_server  # hot reload
+      - ./server/swb_server:/app/server/swb_server  # hot reload
+      - ./contract/swb_contract:/app/contract/swb_contract  # hot reload
       - server_data:/data
       - ./logs:/logs
     environment:

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from swb_contract.verdict import VERDICT_ORDER
 
 from ..db import get_db
 from ..models import Finding, FindingIdentity, VerdictEvent
@@ -7,7 +8,7 @@ from ..verdicts import recompute_counts_by_verdict, write_verdict
 
 router = APIRouter(prefix="/api/v1")
 
-_VALID_VERDICTS = {"true_positive", "false_positive", "uncertain", "unmarked"}
+_VALID_VERDICTS = set(VERDICT_ORDER)
 
 
 def _history(db: Session, identity: FindingIdentity | None) -> list[dict]:

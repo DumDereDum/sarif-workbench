@@ -15,6 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from swb_contract.severity import SEV_ORDER
+from swb_contract.verdict import VERDICT_ORDER
+
 from ..db import get_db
 from ..ingest import MetaValidationError, ingest
 from ..models import Finding, FindingIdentity, Project, Rule, Run
@@ -22,9 +25,6 @@ from ..storage import load_blob, save_blob
 from ..verdicts import recompute_counts_by_verdict, write_verdict
 
 router = APIRouter(prefix="/api/v1")
-
-_SEV_ORDER = ["critical", "high", "medium", "low", "note"]
-_VERDICT_ORDER = ["true_positive", "false_positive", "uncertain", "unmarked"]
 
 # Колонки находки, по которым можно сортировать напрямую (белый список — не
 # пропускаем произвольные имена полей в ORDER BY). "file" — алиас uri, как и
@@ -49,18 +49,18 @@ _UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def _severity_order_expr() -> ColumnElement:
-    """CASE, эмулирующий смысловой порядок _SEV_ORDER (critical>...>note) в SQL."""
+    """CASE, эмулирующий смысловой порядок SEV_ORDER (critical>...>note) в SQL."""
     return case(
-        *[(Finding.severity == s, i) for i, s in enumerate(_SEV_ORDER)],
-        else_=len(_SEV_ORDER),
+        *[(Finding.severity == s, i) for i, s in enumerate(SEV_ORDER)],
+        else_=len(SEV_ORDER),
     )
 
 
 def _verdict_order_expr() -> ColumnElement:
-    """CASE, эмулирующий порядок _VERDICT_ORDER в SQL (требует join с FindingIdentity)."""
+    """CASE, эмулирующий порядок VERDICT_ORDER в SQL (требует join с FindingIdentity)."""
     return case(
-        *[(FindingIdentity.verdict == v, i) for i, v in enumerate(_VERDICT_ORDER)],
-        else_=len(_VERDICT_ORDER),
+        *[(FindingIdentity.verdict == v, i) for i, v in enumerate(VERDICT_ORDER)],
+        else_=len(VERDICT_ORDER),
     )
 
 

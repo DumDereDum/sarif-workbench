@@ -5,8 +5,8 @@
 services:
   server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     volumes:
       - server_data:/data
     environment:

@@ -1,3 +1,7 @@
+// SYNC: VD_ORDER must be kept manually in sync with the single source of
+// truth `contract/swb_contract/verdict.py::VERDICT_ORDER` (T-34). Values are
+// identical as of this writing; there is no codegen/build-step tying them
+// together, so a change on the Python side must be mirrored here by hand.
 export const VD_ORDER = ['true_positive', 'false_positive', 'uncertain', 'unmarked'] as const
 export type Verdict = typeof VD_ORDER[number]
 

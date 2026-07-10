@@ -13,12 +13,15 @@ from typing import Any
 
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
+from swb_contract.verdict import VERDICT_ORDER
 
 from .models import Finding, FindingIdentity, Run, VerdictEvent
 
 VALID_SOURCES = {"human", "ai", "carried", "reset"}
 
-ALL_VERDICTS = ("true_positive", "false_positive", "uncertain", "unmarked")
+# Алиас сохранён ради потребителей `verdicts.ALL_VERDICTS` (T-34: единственный
+# источник значений — swb_contract.verdict.VERDICT_ORDER).
+ALL_VERDICTS = VERDICT_ORDER
 
 
 def write_verdict(
