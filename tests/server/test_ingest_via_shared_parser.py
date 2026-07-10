@@ -18,6 +18,11 @@ Covers:
       must not raise inside ingest()/the shared parser — it must degrade to
       level-based severity for that one rule, exactly like HEAD did via
       `map_severity`'s own try/except, not reject the whole upload with 422.
+  (f) T-36: strict meta<->SARIF reconciliation — a locator with a broken
+      index, one pointing at a locationless SARIF result, a SARIF result
+      with locations missing from meta, or a duplicate claim on the same
+      result all reject the upload via MetaValidationError instead of the
+      old silent defaults (empty message, level="warning").
 
 `ingest()` is a pure function (no DB/app fixtures needed) — most of these
 are direct unit tests, no HTTP round-trip. The one exception is the (e) HTTP
@@ -29,6 +34,8 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+
+import pytest
 
 import swb_server.ingest as ingest_mod
 
@@ -45,11 +52,18 @@ def _meta(findings: list[dict]) -> dict:
 
 
 def _finding(swb_id: str, rule_id: str, run: int = 0, result: int = 0, **kw) -> dict:
+    # T-36: ingest() now validates each finding against the swbmeta/v2
+    # contract schema (swb_contract.swbmeta.Finding) before joining it with
+    # the SARIF result — occurrence, locator.norm_uri and fingerprints.rule
+    # are required by that schema, so the fixture must supply them (they
+    # weren't read by the old dict-based ingest(), hence weren't needed here
+    # before this task).
     return {
         "swb_id": swb_id,
+        "occurrence": 0,
         "locator": {"run": run, "result": result, "rule_id": rule_id, "uri": "src/a.py",
-                    "region": {"start_line": 1}},
-        "fingerprints": {"algo": "swb-fp/2", "level": "tool"},
+                    "norm_uri": "src/a.py", "region": {"start_line": 1}},
+        "fingerprints": {"algo": "swb-fp/2", "level": "tool", "rule": rule_id},
         **kw,
     }
 
@@ -170,7 +184,14 @@ def test_finding_severity_falls_back_to_level_when_rule_security_severity_is_mal
         "name": "T", "version": "1.0",
         "rules": [{"id": "R1", "properties": {"security-severity": "not-a-number"}}],
     }
-    results = [{"ruleId": "R1", "level": "error", "message": {"text": "boom"}, "locations": []}]
+    # T-36: the meta finding below claims (run=0, result=0) — the SARIF
+    # result at that index must have a location, or strict meta/SARIF
+    # reconciliation rejects the upload (a locationless result can never be
+    # claimed by a meta finding, ADR 0001 §8).
+    results = [{"ruleId": "R1", "level": "error", "message": {"text": "boom"},
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": "src/a.py"}, "region": {"startLine": 1},
+                }}]}]
     meta = _meta([_finding("sw2:t:aaaa:0", "R1")])
     result = ingest_mod.ingest(_sarif(driver, results), meta)
     assert len(result["findings"]) == 1
@@ -219,8 +240,8 @@ def test_upload_with_malformed_security_severity_succeeds_not_422(client):
             "swb_id": f"sw2:t:{uuid.uuid4().hex[:24]}:0",
             "occurrence": 0,
             "locator": {"run": 0, "result": 0, "rule_id": "CWE-89", "uri": "src/db.py",
-                        "region": {"start_line": 42}},
-            "fingerprints": {"algo": "swb-fp/2", "level": "tool"},
+                        "norm_uri": "src/db.py", "region": {"start_line": 42}},
+            "fingerprints": {"algo": "swb-fp/2", "level": "tool", "rule": "CWE-89"},
         }],
     }).encode()
 
@@ -241,19 +262,59 @@ def test_upload_with_malformed_security_severity_succeeds_not_422(client):
 
 def test_result_message_and_level_reach_the_finding_via_typed_result():
     driver = {"name": "T", "version": "1.0", "rules": [{"id": "R1"}]}
+    # T-36: needs a real location — see comment on the sibling test above.
     results = [{"ruleId": "R1", "level": "error", "message": {"text": "boom"},
-                "locations": []}]
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": "src/a.py"}, "region": {"startLine": 1},
+                }}]}]
     meta = _meta([_finding("sw2:t:aaaa:0", "R1")])
     result = ingest_mod.ingest(_sarif(driver, results), meta)
     assert len(result["findings"]) == 1
     assert result["findings"][0]["message"] == "boom"
 
 
-def test_missing_sarif_result_for_locator_defaults_message_and_warning_level():
-    # locator points past the end of results — sarif_result lookup misses,
-    # same tolerant fallback as before T-35 (empty message, "warning" level).
+# ── T-36: broken locator index / meta-SARIF reconciliation ─────────────────
+#
+# Before T-36, a locator pointing past the end of `results` silently
+# degraded to an empty message and level="warning" (`results_map.get(...)`
+# returning None) instead of rejecting the upload — this is the anchor bug
+# T-36 fixes (server/swb_server/ingest.py:101/:111 on the pre-T-36 HEAD).
+
+
+def test_locator_pointing_past_available_results_is_rejected():
     driver = {"name": "T", "version": "1.0", "rules": []}
     meta = _meta([_finding("sw2:t:aaaa:0", "R1", result=5)])
-    result = ingest_mod.ingest(_sarif(driver), meta)
-    assert result["findings"][0]["message"] == ""
-    assert result["findings"][0]["severity"] == "medium"  # warning -> medium
+    with pytest.raises(ingest_mod.MetaValidationError, match=r"broken locator index"):
+        ingest_mod.ingest(_sarif(driver), meta)
+
+
+def test_locator_pointing_at_locationless_result_is_rejected():
+    driver = {"name": "T", "version": "1.0", "rules": [{"id": "R1"}]}
+    results = [{"ruleId": "R1", "level": "error", "message": {"text": "boom"}, "locations": []}]
+    meta = _meta([_finding("sw2:t:aaaa:0", "R1")])
+    with pytest.raises(ingest_mod.MetaValidationError, match=r"without locations"):
+        ingest_mod.ingest(_sarif(driver, results), meta)
+
+
+def test_sarif_result_missing_from_meta_is_rejected():
+    driver = {"name": "T", "version": "1.0", "rules": [{"id": "R1"}]}
+    results = [{"ruleId": "R1", "level": "error", "message": {"text": "boom"},
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": "src/a.py"}, "region": {"startLine": 1},
+                }}]}]
+    with pytest.raises(ingest_mod.MetaValidationError, match=r"no matching meta finding"):
+        ingest_mod.ingest(_sarif(driver, results), _meta([]))
+
+
+def test_duplicate_meta_findings_for_same_sarif_result_is_rejected():
+    driver = {"name": "T", "version": "1.0", "rules": [{"id": "R1"}]}
+    results = [{"ruleId": "R1", "level": "error", "message": {"text": "boom"},
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": "src/a.py"}, "region": {"startLine": 1},
+                }}]}]
+    meta = _meta([
+        _finding("sw2:t:aaaa:0", "R1"),
+        _finding("sw2:t:bbbb:0", "R1"),
+    ])
+    with pytest.raises(ingest_mod.MetaValidationError, match=r"expected exactly one"):
+        ingest_mod.ingest(_sarif(driver, results), meta)

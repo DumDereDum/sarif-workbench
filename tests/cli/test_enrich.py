@@ -83,6 +83,55 @@ def test_no_locations_finding_is_skipped(tmp_path):
     data = json.loads(out.read_text())
     assert data["findings"] == []
 
+def test_no_locations_result_logs_warning(tmp_path, caplog):
+    # T-36: результат без locations больше не пропадает бесследно — warning в stderr-лог
+    out = tmp_path / "out.swbmeta.json"
+    with caplog.at_level(logging.WARNING):
+        code = enrich(Args(VALID / "no_locations.sarif", out=out))
+    assert code == 0
+    assert "no locations" in caplog.text
+
+def test_no_locations_result_counted_in_summary_log(tmp_path, caplog):
+    # T-36: результаты без locations учитываются в счётчике итогового лога enrich()
+    out = tmp_path / "out.swbmeta.json"
+    with caplog.at_level(logging.INFO):
+        enrich(Args(VALID / "no_locations.sarif", out=out))
+    assert "0 findings" in caplog.text
+    assert "1 skipped" in caplog.text
+
+def test_mixed_located_and_locationless_results_skip_count_matches(tmp_path, caplog):
+    # T-36: скипается только результат без locations; счётчик считает именно его,
+    # результат с локацией по-прежнему попадает в findings.
+    sarif = tmp_path / "report.sarif"
+    sarif.write_text(json.dumps({
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {"driver": {"name": "TestTool", "version": "1.0", "rules": []}},
+            "results": [
+                {
+                    "ruleId": "CWE-89", "level": "error",
+                    "message": {"text": "has location"},
+                    "locations": [{"physicalLocation": {
+                        "artifactLocation": {"uri": "src/db.py"},
+                        "region": {"startLine": 1},
+                    }}],
+                },
+                {
+                    "ruleId": "CWE-79", "level": "warning",
+                    "message": {"text": "no location"},
+                },
+            ],
+        }],
+    }))
+    out = tmp_path / "out.swbmeta.json"
+    with caplog.at_level(logging.INFO):
+        code = enrich(Args(sarif, out=out))
+    assert code == 0
+    data = json.loads(out.read_text())
+    assert len(data["findings"]) == 1
+    assert "1 findings" in caplog.text
+    assert "1 skipped" in caplog.text
+
 def test_original_sarif_not_modified(tmp_path):
     sarif = VALID / "minimal.sarif"
     original_bytes = sarif.read_bytes()

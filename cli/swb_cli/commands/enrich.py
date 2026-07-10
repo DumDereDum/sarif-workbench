@@ -89,7 +89,7 @@ def enrich(args) -> int:
         lines=args.context_lines if args.context_policy == "lines" else None,
     )
 
-    findings = _build_findings(
+    findings, skipped_no_locations = _build_findings(
         runs,
         repo_root=repo_root,
         context_policy=args.context_policy,
@@ -114,7 +114,13 @@ def enrich(args) -> int:
         meta.model_dump_json(by_alias=True, indent=2),
         encoding="utf-8",
     )
-    logger.info("Wrote %s (%d findings)", out_path, len(findings))
+    # T-36: skipped-no-locations results are counted (not just individually
+    # warned about) so a scan dominated by locationless results doesn't
+    # quietly vanish from triage without a visible trace anywhere.
+    logger.info(
+        "Wrote %s (%d findings, %d skipped: no locations)",
+        out_path, len(findings), skipped_no_locations,
+    )
     return 0
 
 
@@ -124,16 +130,29 @@ def _build_findings(
     context_policy: str,
     context_lines: int,
     no_git: bool,
-) -> list[Finding]:
+) -> tuple[list[Finding], int]:
     # Two passes (ADR 0001 §2): first gather every finding with its base
     # fingerprint material, then let assign_swb_ids number duplicates
     # deterministically — occurrence must not depend on result order.
     prepared: list[tuple] = []
     identity_sources: list[IdentitySource] = []
+    skipped_no_locations = 0
 
     for run in runs:
         for result in run.results:
             if not result.locations:
+                # ADR 0001 §8: a result with no locations has no primary
+                # location to build an identity from — the CLI still cannot
+                # emit a finding for it (giving it one would need a new
+                # fingerprint algorithm version, swb-fp/3). T-36: this used
+                # to be a silent `continue` with no trace anywhere; now it's
+                # logged and counted so it doesn't vanish without a warning.
+                skipped_no_locations += 1
+                logger.warning(
+                    "Result run=%d result=%d rule=%r has no locations; "
+                    "skipping (no identity can be built for it, see ADR 0001 §8)",
+                    run.index, result.result_index, result.rule_id,
+                )
                 continue
             loc = result.locations[0]
 
@@ -210,7 +229,7 @@ def _build_findings(
             git=git,
         ))
 
-    return findings
+    return findings, skipped_no_locations
 
 
 def _build_provenance(

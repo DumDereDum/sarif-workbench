@@ -10,7 +10,7 @@ import pytest
 DATA = Path(__file__).parent.parent / "data"
 
 
-def _meta_for(sarif_bytes: bytes) -> bytes:
+def _meta_for(sarif_bytes: bytes, findings: list | None = None) -> bytes:
     meta = {
         "schema": "swbmeta/v2",
         "source_sarif": {
@@ -19,7 +19,7 @@ def _meta_for(sarif_bytes: bytes) -> bytes:
             "size_bytes": len(sarif_bytes),
         },
         "provenance": {"repo": "swb-test-repo"},
-        "findings": [],
+        "findings": findings if findings is not None else [],
     }
     return json.dumps(meta).encode()
 
@@ -62,8 +62,20 @@ def test_upload_under_limit_accepted_and_stored_intact(client):
     # контроль: с дефолтным лимитом валидная пара проходит,
     # а SARIF после лимитированного чтения хранится байт-в-байт
     sarif_bytes = (DATA / "valid" / "minimal.sarif").read_bytes()
-    resp = _post_run(client, sarif_bytes, _meta_for(sarif_bytes))
-    assert resp.status_code == 201
+    # T-36: minimal.sarif's one result has a location, so meta must claim it
+    # — an empty findings list would now fail strict meta/SARIF reconciliation.
+    finding = {
+        "swb_id": f"sw2:t:{'a' * 24}:0",
+        "occurrence": 0,
+        "locator": {
+            "run": 0, "result": 0, "rule_id": "CWE-89",
+            "uri": "src/db.py", "norm_uri": "src/db.py",
+            "region": {"start_line": 42, "start_column": 8},
+        },
+        "fingerprints": {"algo": "swb-fp/2", "level": "tool", "rule": "CWE-89"},
+    }
+    resp = _post_run(client, sarif_bytes, _meta_for(sarif_bytes, [finding]))
+    assert resp.status_code == 201, resp.text
     run_id = resp.json()["run_id"]
     stored = client.get(f"/api/v1/runs/{run_id}/sarif")
     assert stored.content == sarif_bytes
