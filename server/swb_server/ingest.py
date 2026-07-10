@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
+from swb_contract.sarif.models import SarifResult
+from swb_contract.sarif.parser import parse_sarif_data
 from swb_contract.severity import SEV_ORDER, map_severity
 
 
@@ -17,12 +18,6 @@ def _extract_cwe(rule_id: str, tags: list[str]) -> str | None:
     if m:
         return m.group(1).upper()
     return None
-
-
-def _text(obj: Any) -> str:
-    if isinstance(obj, dict):
-        return obj.get("text", "")
-    return str(obj) if obj else ""
 
 
 class MetaValidationError(ValueError):
@@ -51,35 +46,35 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         }
     """
     sarif = json.loads(sarif_bytes)
-    sarif_runs: list[dict] = sarif.get("runs", [])
+    # T-35: structural SARIF parsing (tool/rules/results — message, level,
+    # ruleId) is shared with the CLI parser via swb_contract.sarif; only the
+    # swb-specific joins below (locator from meta, CWE extraction, severity
+    # mapping) stay local to ingest.
+    sarif_runs = parse_sarif_data(sarif)
 
-    first = sarif_runs[0] if sarif_runs else {}
-    driver: dict = first.get("tool", {}).get("driver", {})
-    tool_name: str = driver.get("name", "unknown")
-    tool_version: str = driver.get("version", "unknown")
+    first = sarif_runs[0] if sarif_runs else None
+    tool_name: str = first.tool.name if first else "unknown"
+    tool_version: str = (first.tool.version if first else None) or "unknown"
 
-    # Build rules lookup
+    # Build rules lookup (only the first run's driver, same as before T-35)
     rules_map: dict[str, dict] = {}
-    for rule in driver.get("rules", []):
-        rid = rule.get("id", "")
-        props = rule.get("properties", {})
-        tags = props.get("tags", [])
-        sec_sev = props.get("security-severity")
-        level = rule.get("defaultConfiguration", {}).get("level", "warning")
-        rules_map[rid] = {
-            "name": rule.get("name", "") or rid,
-            "description": _text(rule.get("fullDescription") or rule.get("shortDescription")),
-            "help_uri": rule.get("helpUri"),
-            "default_severity": map_severity(sec_sev, level),
-            "security_severity": sec_sev,
-            "cwe": _extract_cwe(rid, tags),
-        }
+    if first is not None:
+        for rule in first.tool.rules:
+            rid = rule.rule_id
+            rules_map[rid] = {
+                "name": rule.name or rid,
+                "description": rule.full_description or "",
+                "help_uri": rule.help_uri,
+                "default_severity": map_severity(rule.security_severity, rule.default_level),
+                "security_severity": rule.security_severity,
+                "cwe": _extract_cwe(rid, rule.tags),
+            }
 
     # Build SARIF results lookup: (run_idx, result_idx) -> result
-    results_map: dict[tuple[int, int], dict] = {}
-    for ri, srun in enumerate(sarif_runs):
-        for rj, result in enumerate(srun.get("results", [])):
-            results_map[(ri, rj)] = result
+    results_map: dict[tuple[int, int], SarifResult] = {}
+    for srun in sarif_runs:
+        for result in srun.results:
+            results_map[(srun.index, result.result_index)] = result
 
     counts = {s: 0 for s in SEV_ORDER}
     counts["all"] = 0
@@ -103,11 +98,11 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         start_line = region.get("start_line", 0)
         end_line = region.get("end_line")
 
-        sarif_result = results_map.get((run_idx, res_idx), {})
+        sarif_result = results_map.get((run_idx, res_idx))
         rule_info = rules_map.get(rule_id, {})
 
-        message = _text(sarif_result.get("message", ""))
-        level = sarif_result.get("level", "warning")
+        message = sarif_result.message if sarif_result is not None else ""
+        level = sarif_result.level if sarif_result is not None else "warning"
         severity = map_severity(rule_info.get("security_severity"), level)
         cwe = rule_info.get("cwe") or _extract_cwe(rule_id, [])
 

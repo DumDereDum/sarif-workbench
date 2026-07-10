@@ -1,56 +1,26 @@
+"""Typed SARIF 2.1.0 dataclasses — re-exported from the shared contract package.
+
+The models themselves live in `swb_contract.sarif.models` (T-35, single
+source of truth shared with the server). This module stays as a thin
+re-export so existing CLI imports (`from swb_cli.sarif.models import ...`)
+keep working unchanged.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from swb_contract.sarif.models import (
+    SarifLocation,
+    SarifRegion,
+    SarifResult,
+    SarifRule,
+    SarifRun,
+    SarifTool,
+)
 
-
-@dataclass
-class SarifRegion:
-    start_line: int
-    end_line: int | None = None
-    start_column: int | None = None
-
-
-@dataclass
-class SarifLocation:
-    uri: str
-    region: SarifRegion
-    uri_base_id: str | None = None
-
-
-@dataclass
-class SarifResult:
-    run_index: int
-    result_index: int
-    rule_id: str
-    level: str           # error | warning | note | none
-    message: str
-    locations: list[SarifLocation] = field(default_factory=list)
-    code_flow_steps: list[str] = field(default_factory=list)
-    fingerprints: dict[str, str] = field(default_factory=dict)
-    partial_fingerprints: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
-class SarifRule:
-    rule_id: str
-    name: str | None = None
-    full_description: str | None = None
-    help_uri: str | None = None
-    security_severity: float | None = None  # from properties["security-severity"]
-
-
-@dataclass
-class SarifTool:
-    name: str
-    version: str | None
-    rules: list[SarifRule] = field(default_factory=list)
-
-
-@dataclass
-class SarifRun:
-    index: int
-    tool: SarifTool
-    results: list[SarifResult] = field(default_factory=list)
-    # Raw `originalUriBaseIds` mapping: base id -> artifactLocation dict
-    # ({"uri": ..., "uriBaseId": ...}); used to resolve location uriBaseId.
-    original_uri_base_ids: dict = field(default_factory=dict)
+__all__ = [
+    "SarifLocation",
+    "SarifRegion",
+    "SarifResult",
+    "SarifRule",
+    "SarifRun",
+    "SarifTool",
+]
