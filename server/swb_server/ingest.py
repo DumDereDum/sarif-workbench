@@ -47,7 +47,7 @@ def _format_validation_error(exc: ValidationError) -> str:
 
 
 def _validate_meta_findings(raw_findings: list) -> list[MetaFinding]:
-    """Validate every meta finding against the swbmeta/v2 contract schema
+    """Validate every meta finding against the swbmeta/v3 contract schema
     (`swb_contract.swbmeta.Finding`) instead of reading it field-by-field
     with permissive `mf.get(key, default)` calls.
 
@@ -184,7 +184,7 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         for result in srun.results:
             results_map[(srun.index, result.result_index)] = result
 
-    # T-36: meta findings are validated against the swbmeta/v2 contract
+    # T-36: meta findings are validated against the swbmeta/v3 contract
     # schema (`swb_contract.swbmeta.Finding`) and then cross-checked against
     # the parsed SARIF results — see docstrings of both helpers. Either
     # check failing raises MetaValidationError, which routers/runs.py turns
@@ -243,6 +243,15 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
             "snippet_end": code.end_line if code else None,
             "lang": code.lang if code else None,
             "git": vf.git.model_dump() if vf.git else None,
+            # T-39 (ADR 0001 §8): multi-location payload, taken straight from
+            # the (already-validated) meta finding — same trust boundary as
+            # code/git above; not cross-checked against SARIF's own
+            # locations[1:]/relatedLocations/codeFlows (ingest doesn't do
+            # that for code/git either). Always a list (possibly empty), not
+            # None, so the API/UI don't need a null-check.
+            "extra_locations": [el.model_dump() for el in vf.extra_locations],
+            "related_locations": [rl.model_dump() for rl in vf.related_locations],
+            "code_flow": [cf.model_dump() for cf in vf.code_flows],
         })
 
     return {

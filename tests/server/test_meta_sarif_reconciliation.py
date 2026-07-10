@@ -80,7 +80,7 @@ def _finding(run: int, result: int, rule_id: str = "CWE-89", uri: str = "src/db.
 
 def _meta_bytes(sarif_bytes: bytes, findings: list[dict], repo: str) -> bytes:
     doc = {
-        "schema": "swbmeta/v2",
+        "schema": "swbmeta/v3",
         "generated_by": "tests",
         "generated_at": "2026-07-04T00:00:00Z",
         "source_sarif": {

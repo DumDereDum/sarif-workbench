@@ -5,12 +5,16 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    CodeFlowStep,
+    SarifCodeFlow,
     SarifLocation,
     SarifRegion,
+    SarifRelatedLocation,
     SarifResult,
     SarifRule,
     SarifRun,
     SarifTool,
+    SarifThreadFlow,
 )
 
 
@@ -95,6 +99,9 @@ def _parse_security_severity(sec_sev: Any) -> float | None:
 
 def _parse_result(run_idx: int, result_idx: int, result: dict) -> SarifResult:
     locations = [_parse_location(loc) for loc in result.get("locations", [])]
+    related_locations = [
+        _parse_related_location(loc) for loc in result.get("relatedLocations", [])
+    ]
     return SarifResult(
         run_index=run_idx,
         result_index=result_idx,
@@ -102,7 +109,8 @@ def _parse_result(run_idx: int, result_idx: int, result: dict) -> SarifResult:
         level=result.get("level", "warning"),
         message=_extract_text(result.get("message", {})),
         locations=locations,
-        code_flow_steps=_parse_code_flows(result.get("codeFlows", [])),
+        related_locations=related_locations,
+        code_flows=_parse_code_flows(result.get("codeFlows", [])),
         fingerprints=_parse_fingerprint_dict(result.get("fingerprints")),
         partial_fingerprints=_parse_fingerprint_dict(result.get("partialFingerprints")),
     )
@@ -115,42 +123,61 @@ def _parse_fingerprint_dict(obj: object) -> dict[str, str]:
     return {str(k): str(v) for k, v in obj.items()}
 
 
-def _parse_location(loc: dict) -> SarifLocation:
+def _parse_physical_location(loc: dict) -> tuple[str, SarifRegion, str | None]:
+    """Shared (uri, region, uriBaseId) extraction — used by both `locations[]`
+    and `relatedLocations[]`, which share the same `physicalLocation` shape."""
     phys = loc.get("physicalLocation", {})
     artifact = phys.get("artifactLocation", {})
     region = phys.get("region", {})
-    return SarifLocation(
-        uri=artifact.get("uri", ""),
-        region=SarifRegion(
+    return (
+        artifact.get("uri", ""),
+        SarifRegion(
             start_line=region.get("startLine", 1),
             end_line=region.get("endLine"),
             start_column=region.get("startColumn"),
         ),
-        uri_base_id=artifact.get("uriBaseId"),
+        artifact.get("uriBaseId"),
     )
 
 
-def _parse_code_flows(code_flows: list) -> list[str]:
-    steps = []
+def _parse_location(loc: dict) -> SarifLocation:
+    uri, region, uri_base_id = _parse_physical_location(loc)
+    return SarifLocation(uri=uri, region=region, uri_base_id=uri_base_id)
+
+
+def _parse_related_location(loc: dict) -> SarifRelatedLocation:
+    # T-39 (ADR 0001 §8): relatedLocations are payload, not identity material —
+    # stored/shown, never fed into swb_id.
+    uri, region, uri_base_id = _parse_physical_location(loc)
+    return SarifRelatedLocation(
+        uri=uri,
+        region=region,
+        uri_base_id=uri_base_id,
+        message=_extract_text(loc.get("message", {})),
+    )
+
+
+def _parse_code_flows(code_flows: list) -> list[SarifCodeFlow]:
+    """T-39 (ADR 0001 §8): codeFlow structure is preserved (codeFlows ->
+    threadFlows -> steps), not collapsed into display strings — it's payload,
+    not identity material. Nesting mirrors the SARIF 2.1.0 shape so multiple
+    codeFlows/threadFlows in one result (e.g. several taint paths) aren't
+    merged into a single flat list."""
+    result: list[SarifCodeFlow] = []
     for cf in code_flows:
+        thread_flows: list[SarifThreadFlow] = []
         for tf in cf.get("threadFlows", []):
+            steps: list[CodeFlowStep] = []
             for tfl in tf.get("locations", []):
                 inner_loc = tfl.get("location", {})
                 msg = _extract_text(inner_loc.get("message", {}))
-                uri = (
-                    inner_loc
-                    .get("physicalLocation", {})
-                    .get("artifactLocation", {})
-                    .get("uri", "")
-                )
-                line = (
-                    inner_loc
-                    .get("physicalLocation", {})
-                    .get("region", {})
-                    .get("startLine", "?")
-                )
-                steps.append(f"{uri}:{line}" + (f" — {msg}" if msg else ""))
-    return steps
+                inner_phys = inner_loc.get("physicalLocation", {})
+                uri = inner_phys.get("artifactLocation", {}).get("uri", "")
+                line = inner_phys.get("region", {}).get("startLine")
+                steps.append(CodeFlowStep(uri=uri, line=line, message=msg))
+            thread_flows.append(SarifThreadFlow(steps=steps))
+        result.append(SarifCodeFlow(thread_flows=thread_flows))
+    return result
 
 
 def _extract_text(obj: dict | str | None) -> str:

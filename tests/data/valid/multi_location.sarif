@@ -1,0 +1,88 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "CWE-89",
+              "name": "SqlInjection",
+              "fullDescription": { "text": "SQL Injection" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-89",
+          "level": "error",
+          "message": { "text": "Tainted data reaches SQL sink" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/sink.py" },
+                "region": { "startLine": 42, "startColumn": 5 }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/source.py" },
+                "region": { "startLine": 10 }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "id": 0,
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/helper.py" },
+                "region": { "startLine": 5 }
+              },
+              "message": { "text": "Sanitizer bypass here" }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/source.py" },
+                          "region": { "startLine": 10 }
+                        },
+                        "message": { "text": "user input enters" }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/transform.py" },
+                          "region": { "startLine": 20 }
+                        },
+                        "message": { "text": "passed through transform()" }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/sink.py" },
+                          "region": { "startLine": 42 }
+                        },
+                        "message": { "text": "reaches SQL sink" }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

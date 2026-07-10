@@ -76,7 +76,12 @@ def _serialize_finding(db: Session, f: Finding) -> dict:
         "scope": f.scope,
         "snippet": snippet_obj,
         "lang": f.lang,
-        "code_flow": f.code_flow,
+        # T-39 (ADR 0001 §8): multi-location payload — always a list
+        # (possibly empty), never None, even for findings ingested before
+        # this column existed (SQLAlchemy JSON column default is NULL).
+        "code_flow": f.code_flow or [],
+        "extra_locations": f.extra_locations or [],
+        "related_locations": f.related_locations or [],
         "git": f.git,
         "verdict": {
             "verdict": identity.verdict if identity else "unmarked",

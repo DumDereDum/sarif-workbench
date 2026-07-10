@@ -257,8 +257,8 @@ def test_content_hash_helper_matches_direct_material():
     assert content_hash("t", "r", "u", "w") == hashlib.sha256(material.encode()).hexdigest()
 
 
-# ── схема v2 (ADR §5) ────────────────────────────────────────────────────────
+# ── схема (ADR §5, версия поднята до v3 в T-39) ───────────────────────────────
 
-def test_swbmeta_schema_is_v2(tmp_path):
+def test_swbmeta_schema_is_v3(tmp_path):
     data = _enrich(VALID / "minimal.sarif", tmp_path)
-    assert data["schema"] == "swbmeta/v2"
+    assert data["schema"] == "swbmeta/v3"

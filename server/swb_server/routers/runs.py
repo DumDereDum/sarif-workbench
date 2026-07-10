@@ -262,8 +262,8 @@ async def upload_run(
     except json.JSONDecodeError as exc:
         raise HTTPException(422, {"error": "invalid_meta", "message": str(exc)})
 
-    if meta_data.get("schema") != "swbmeta/v2":
-        raise HTTPException(422, {"error": "unsupported_schema", "message": "Only swbmeta/v2 is supported"})
+    if meta_data.get("schema") != "swbmeta/v3":
+        raise HTTPException(422, {"error": "unsupported_schema", "message": "Only swbmeta/v3 is supported"})
 
     actual_sha = hashlib.sha256(sarif_bytes).hexdigest()
     expected_sha = meta_data.get("source_sarif", {}).get("sha256", "")

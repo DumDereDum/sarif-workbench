@@ -54,7 +54,7 @@ def test_output_is_valid_json(tmp_path):
     out = tmp_path / "out.swbmeta.json"
     enrich(Args(VALID / "minimal.sarif", out=out))
     data = json.loads(out.read_text())
-    assert data["schema"] == "swbmeta/v2"
+    assert data["schema"] == "swbmeta/v3"
 
 def test_sha256_matches_source_file(tmp_path):
     sarif = VALID / "minimal.sarif"

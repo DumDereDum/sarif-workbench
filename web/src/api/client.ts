@@ -97,6 +97,16 @@ export interface Snippet {
   start_line: number; end_line: number | null; lines: string[]; hot_line: number
 }
 
+// T-39 (ADR 0001 §8): multi-location payload — not identity, purely display.
+export interface LocationRegion {
+  start_line: number; end_line: number | null; start_column: number | null
+}
+export interface ExtraLocation { uri: string; region: LocationRegion }
+export interface RelatedLocation { uri: string; region: LocationRegion; message: string | null }
+export interface CodeFlowStep { uri: string; line: number | null; message: string | null }
+export interface ThreadFlow { steps: CodeFlowStep[] }
+export interface CodeFlow { thread_flows: ThreadFlow[] }
+
 export interface VerdictObj {
   verdict: string; source: string | null; rationale: string | null
   provider: string | null; needs_reconfirm: boolean
@@ -107,7 +117,11 @@ export interface VerdictObj {
 export interface FindingDetail extends FindingItem {
   rule_description: string | null; help_uri: string | null
   end_line: number | null
-  snippet: Snippet | null; code_flow: unknown | null
+  snippet: Snippet | null
+  // T-39: always arrays (possibly empty), server never sends null for these.
+  code_flow: CodeFlow[]
+  extra_locations: ExtraLocation[]
+  related_locations: RelatedLocation[]
   git: { blob_sha?: string; blame_commit?: string; last_changed?: string } | null
   verdict: string; // overridden by `verdict` object below
   verdictObj: VerdictObj

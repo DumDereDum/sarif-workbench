@@ -84,7 +84,7 @@ def make_sarif(findings_spec: list[dict], tool: str = "TestTool") -> bytes:
 
 
 def make_meta(sarif_bytes: bytes, findings_spec: list[dict], repo: str = "swb-test-repo") -> bytes:
-    """swbmeta/v2 для make_sarif: swb_id формата sw2:{t|c|l}:hash:occ (ADR §1)."""
+    """swbmeta/v3 для make_sarif: swb_id формата sw2:{t|c|l}:hash:occ (ADR §1)."""
     findings = []
     for i, spec in enumerate(findings_spec):
         swb_id = spec.get("swb_id") or f"sw2:t:{hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:24]}:0"
@@ -108,7 +108,7 @@ def make_meta(sarif_bytes: bytes, findings_spec: list[dict], repo: str = "swb-te
             }
         )
     meta = {
-        "schema": "swbmeta/v2",
+        "schema": "swbmeta/v3",
         "generated_by": "tests",
         "generated_at": "2026-07-04T00:00:00Z",
         "source_sarif": {

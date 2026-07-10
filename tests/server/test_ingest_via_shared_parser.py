@@ -48,11 +48,11 @@ def _sarif(driver: dict, results: list[dict] | None = None) -> bytes:
 
 
 def _meta(findings: list[dict]) -> dict:
-    return {"schema": "swbmeta/v2", "findings": findings}
+    return {"schema": "swbmeta/v3", "findings": findings}
 
 
 def _finding(swb_id: str, rule_id: str, run: int = 0, result: int = 0, **kw) -> dict:
-    # T-36: ingest() now validates each finding against the swbmeta/v2
+    # T-36: ingest() now validates each finding against the swbmeta/v3
     # contract schema (swb_contract.swbmeta.Finding) before joining it with
     # the SARIF result — occurrence, locator.norm_uri and fingerprints.rule
     # are required by that schema, so the fixture must supply them (they
@@ -227,7 +227,7 @@ def test_upload_with_malformed_security_severity_succeeds_not_422(client):
         "properties": {"nonce": uuid.uuid4().hex},
     }).encode()
     meta = json.dumps({
-        "schema": "swbmeta/v2",
+        "schema": "swbmeta/v3",
         "generated_by": "tests",
         "generated_at": "2026-07-04T00:00:00Z",
         "source_sarif": {

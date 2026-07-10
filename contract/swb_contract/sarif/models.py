@@ -18,6 +18,35 @@ class SarifLocation:
 
 
 @dataclass
+class SarifRelatedLocation:
+    """`result.relatedLocations[]` — same physicalLocation shape as
+    `locations[]`, plus an optional message (T-39). Payload, not identity
+    (ADR 0001 §8)."""
+    uri: str
+    region: SarifRegion
+    uri_base_id: str | None = None
+    message: str = ""
+
+
+@dataclass
+class CodeFlowStep:
+    """One `threadFlows[].locations[]` entry of a SARIF codeFlow (T-39)."""
+    uri: str
+    line: int | None
+    message: str
+
+
+@dataclass
+class SarifThreadFlow:
+    steps: list[CodeFlowStep] = field(default_factory=list)
+
+
+@dataclass
+class SarifCodeFlow:
+    thread_flows: list[SarifThreadFlow] = field(default_factory=list)
+
+
+@dataclass
 class SarifResult:
     run_index: int
     result_index: int
@@ -25,7 +54,8 @@ class SarifResult:
     level: str           # error | warning | note | none
     message: str
     locations: list[SarifLocation] = field(default_factory=list)
-    code_flow_steps: list[str] = field(default_factory=list)
+    related_locations: list[SarifRelatedLocation] = field(default_factory=list)
+    code_flows: list[SarifCodeFlow] = field(default_factory=list)
     fingerprints: dict[str, str] = field(default_factory=dict)
     partial_fingerprints: dict[str, str] = field(default_factory=dict)
 

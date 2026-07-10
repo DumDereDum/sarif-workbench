@@ -1,9 +1,9 @@
 """T-15: ingest/API работают со стабильной identity (ADR 0001 §5/§6).
 
-- meta со схемой != swbmeta/v2 отклоняется явной 422 (fallback v1 не проектируется);
+- meta со схемой != swbmeta/v3 отклоняется явной 422 (fallback на v1/v2 не проектируется, T-39);
 - swb_id обязателен для каждой находки meta — без него 422 invalid_meta, ран не создаётся;
 - API находок (список и деталь) отдаёт стабильный swb_id, fingerprint_algo и fingerprint_level;
-- сквозной путь swb-cli enrich → upload → API сохраняет identity из swbmeta v2.
+- сквозной путь swb-cli enrich → upload → API сохраняет identity из swbmeta v3.
 """
 import hashlib
 import json
@@ -30,7 +30,7 @@ def _post_run(client, sarif_bytes: bytes, meta_bytes: bytes):
     )
 
 
-# ── поведение на старом meta (ADR §5: единственная схема — v2, иное → 422) ────
+# ── поведение на старом meta (ADR §5: единственная схема — v3, иное → 422) ────
 
 
 def test_meta_v1_rejected_with_422_unsupported_schema(client):
@@ -43,7 +43,21 @@ def test_meta_v1_rejected_with_422_unsupported_schema(client):
     assert resp.status_code == 422
     detail = resp.json()["detail"]
     assert detail["error"] == "unsupported_schema"
-    assert "swbmeta/v2" in detail["message"]
+    assert "swbmeta/v3" in detail["message"]
+
+
+def test_meta_v2_rejected_with_422_unsupported_schema(client):
+    # T-39: schema bumped v2 -> v3 (multi-location payload), no compatibility
+    # shim — the previously-current version is rejected just like v1.
+    spec = [{"rule_id": "CWE-89", "uri": "src/db.py", "start_line": 42}]
+    sarif = make_sarif(spec)
+    meta = json.loads(make_meta(sarif, spec, repo=_unique_repo()))
+    meta["schema"] = "swbmeta/v2"
+
+    resp = _post_run(client, sarif, json.dumps(meta).encode())
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert detail["error"] == "unsupported_schema"
 
 
 # ── swb_id обязателен: без него identity не построить (ADR §1/§6) ─────────────
@@ -88,7 +102,7 @@ def test_broken_sarif_still_reported_as_invalid_sarif(client):
     """Разделение ошибок meta/SARIF не съело прежнюю ветку invalid_sarif."""
     sarif = b"{not json"
     meta = {
-        "schema": "swbmeta/v2",
+        "schema": "swbmeta/v3",
         "source_sarif": {"sha256": hashlib.sha256(sarif).hexdigest()},
         "provenance": {"repo": _unique_repo()},
         "findings": [],
@@ -169,7 +183,7 @@ def test_enrich_upload_roundtrip_preserves_identity(client, db_session, tmp_path
 
     assert enrich(_EnrichArgs(sarif_path, out_path, root)) == 0
     meta = json.loads(out_path.read_text())
-    assert meta["schema"] == "swbmeta/v2"
+    assert meta["schema"] == "swbmeta/v3"
     meta_finding = meta["findings"][0]
     swb_id = meta_finding["swb_id"]
     assert swb_id.startswith("sw2:t:")  # partialFingerprints → уровень tool

@@ -8,14 +8,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from swb_cli.swbmeta import (
+    CodeFlow,
+    CodeFlowStep,
     ContextPolicy,
+    ExtraLocation,
     Finding,
     GitInfo,
     Locator,
     Provenance,
+    RelatedLocation,
     Region,
     SourceSarif,
     SwbMeta,
+    ThreadFlow,
 )
 
 from swb_cli.sarif.parser import parse_sarif
@@ -201,14 +206,25 @@ def _build_findings(
                 message=result.message,
                 fingerprints=fingerprints,
             ))
-            prepared.append((run, result, loc, norm_uri, fingerprints, code, git))
+            # T-39 (ADR 0001 §8): locations[1:], relatedLocations and
+            # codeFlows are payload, not identity material — they ride along
+            # unchanged and never touch identity_sources/fingerprints above.
+            extra_locations = _convert_extra_locations(result.locations[1:])
+            related_locations = _convert_related_locations(result.related_locations)
+            code_flows = _convert_code_flows(result.code_flows)
+            prepared.append((
+                run, result, loc, norm_uri, fingerprints, code, git,
+                extra_locations, related_locations, code_flows,
+            ))
 
     swb_ids = assign_swb_ids(identity_sources)
 
     findings = []
-    for (run, result, loc, norm_uri, fingerprints, code, git), (swb_id, occurrence) in zip(
-        prepared, swb_ids,
-    ):
+    for (
+        (run, result, loc, norm_uri, fingerprints, code, git,
+         extra_locations, related_locations, code_flows),
+        (swb_id, occurrence),
+    ) in zip(prepared, swb_ids):
         findings.append(Finding(
             swb_id=swb_id,
             occurrence=occurrence,
@@ -227,9 +243,61 @@ def _build_findings(
             fingerprints=fingerprints,
             code=code,
             git=git,
+            extra_locations=extra_locations,
+            related_locations=related_locations,
+            code_flows=code_flows,
         ))
 
     return findings, skipped_no_locations
+
+
+def _convert_extra_locations(locations) -> list[ExtraLocation]:
+    """`result.locations[1:]` -> swbmeta payload (ADR 0001 §8: not identity)."""
+    return [
+        ExtraLocation(
+            uri=loc.uri,
+            region=Region(
+                start_line=loc.region.start_line,
+                end_line=loc.region.end_line,
+                start_column=loc.region.start_column,
+            ),
+        )
+        for loc in locations
+    ]
+
+
+def _convert_related_locations(related_locations) -> list[RelatedLocation]:
+    """`result.relatedLocations` -> swbmeta payload (ADR 0001 §8: not identity)."""
+    return [
+        RelatedLocation(
+            uri=loc.uri,
+            region=Region(
+                start_line=loc.region.start_line,
+                end_line=loc.region.end_line,
+                start_column=loc.region.start_column,
+            ),
+            message=loc.message or None,
+        )
+        for loc in related_locations
+    ]
+
+
+def _convert_code_flows(code_flows) -> list[CodeFlow]:
+    """`result.codeFlows` -> swbmeta payload, structure preserved (T-39)."""
+    return [
+        CodeFlow(
+            thread_flows=[
+                ThreadFlow(
+                    steps=[
+                        CodeFlowStep(uri=step.uri, line=step.line, message=step.message or None)
+                        for step in tf.steps
+                    ]
+                )
+                for tf in cf.thread_flows
+            ]
+        )
+        for cf in code_flows
+    ]
 
 
 def _build_provenance(

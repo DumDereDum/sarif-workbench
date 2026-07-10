@@ -158,7 +158,13 @@ class Finding(Base):
     snippet_start = Column(Integer)
     snippet_end = Column(Integer)
     lang = Column(String)
+    # T-39 (ADR 0001 §8): multi-location payload, not identity material.
+    # code_flow stores the structured codeFlows -> threadFlows -> steps
+    # (list, possibly empty) — the column existed before T-39 but was always
+    # None (never written by ingest); extra_locations/related_locations are new.
     code_flow = Column(JSON)
+    extra_locations = Column(JSON)
+    related_locations = Column(JSON)
     git = Column(JSON)
 
     run = relationship("Run", back_populates="findings")

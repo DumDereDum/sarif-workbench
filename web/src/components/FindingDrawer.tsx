@@ -121,8 +121,56 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
                   {f.lang && <><span className="k">Язык</span><span className="v">{f.lang}</span></>}
                   <span className="k">swb_id</span>
                   <span className="v mono">{f.swb_id}</span>
+                  {/* T-39: primary location + count/list of the rest (ADR 0001 §8 — payload, not identity) */}
+                  {f.extra_locations.length > 0 && (
+                    <><span className="k">Ещё локаций</span><span className="v">{f.extra_locations.length}</span></>
+                  )}
                 </div>
+                {f.extra_locations.length > 0 && (
+                  <div className="audit" style={{ marginTop: 8 }}>
+                    {f.extra_locations.map((el, i) => (
+                      <div key={i} className="ar">
+                        <span className="mono">{el.uri}:{el.region.start_line}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Related locations */}
+              {f.related_locations.length > 0 && (
+                <div className="dr-sec">
+                  <h3>Связанные локации</h3>
+                  <div className="audit">
+                    {f.related_locations.map((rl, i) => (
+                      <div key={i} className="ar">
+                        <span className="mono">{rl.uri}:{rl.region.start_line}</span>
+                        {rl.message && <span className="faint">— {rl.message}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Code flow */}
+              {f.code_flow.length > 0 && (
+                <div className="dr-sec">
+                  <h3>Путь выполнения (code flow)</h3>
+                  <div className="audit">
+                    {f.code_flow.flatMap((cf, ci) =>
+                      cf.thread_flows.flatMap((tf, ti) =>
+                        tf.steps.map((s, si) => (
+                          <div key={`${ci}-${ti}-${si}`} className="ar">
+                            <span className="faint mono">{si + 1}.</span>
+                            <span className="mono">{s.uri}{s.line != null ? `:${s.line}` : ''}</span>
+                            {s.message && <span className="faint">— {s.message}</span>}
+                          </div>
+                        ))
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Code snippet */}
               {f.snippet && (
