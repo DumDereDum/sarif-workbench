@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, normalizeDetail } from '../api/client'
+import { ApiError, api, normalizeDetail } from '../api/client'
 import { SEV, sevStyle } from '../lib/severity'
 import { VERDICT, SRC_LABEL, verdictStyle, verdictLabel } from '../lib/verdict'
 
@@ -31,12 +31,17 @@ function CodeBlock({ snippet, hotLine }: { snippet: { start_line: number; lines:
 export default function FindingDrawer({ findingId, runId, onClose }: Props) {
   const qc = useQueryClient()
   const open = !!findingId
+  // T-38: сообщение о конфликте версий, показываемое вместо молчаливого
+  // затирания чужого решения (см. verdictMut.onError ниже).
+  const [conflictMsg, setConflictMsg] = useState<string | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  useEffect(() => { setConflictMsg(null) }, [findingId])
 
   const { data: raw, isLoading } = useQuery({
     queryKey: ['finding', findingId],
@@ -45,12 +50,27 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
   })
 
   const verdictMut = useMutation({
-    mutationFn: ({ verdict, rationale }: { verdict: string; rationale: string }) =>
-      api.setVerdict(findingId!, verdict, rationale),
+    mutationFn: ({ verdict, rationale, version }: { verdict: string; rationale: string; version: number }) =>
+      api.setVerdict(findingId!, verdict, rationale, version),
     onSuccess: () => {
+      setConflictMsg(null)
       qc.invalidateQueries({ queryKey: ['finding', findingId] })
       qc.invalidateQueries({ queryKey: ['findings', runId] })
       qc.invalidateQueries({ queryKey: ['run', runId] })
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.code === 'version_conflict') {
+        // Сервер уже прислал актуальное состояние находки в теле 409 —
+        // используем его напрямую вместо лишнего повторного GET, чтобы UI
+        // сразу показал то, что реально лежит в БД, а не молча потерял ввод.
+        const fresh = err.detail?.finding
+        if (fresh) {
+          qc.setQueryData(['finding', findingId], fresh)
+        } else {
+          qc.invalidateQueries({ queryKey: ['finding', findingId] })
+        }
+        setConflictMsg('Находка была изменена другим пользователем (или AI-анализом), пока вы её редактировали. Вердикт не сохранён — данные обновлены, проверьте и повторите.')
+      }
     },
   })
 
@@ -143,6 +163,12 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
                 <h3>Вердикт триажа</h3>
                 <VerdictCard verdict={f.verdictObj} />
 
+                {conflictMsg && (
+                  <div className="rationale" style={{ marginTop: 10, color: 'var(--high)', background: 'var(--high-bg)', borderColor: 'var(--high)' }}>
+                    {conflictMsg}
+                  </div>
+                )}
+
                 <div className="vd-actions-h">Переопределить</div>
                 <div className="vd-actions">
                   {(['true_positive', 'false_positive', 'uncertain'] as const).map(v => {
@@ -152,7 +178,7 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
                         key={v}
                         className="vd-btn"
                         style={isActive ? { background: VERDICT[v].c, borderColor: VERDICT[v].c, color: '#fff' } : undefined}
-                        onClick={() => verdictMut.mutate({ verdict: v, rationale: '' })}
+                        onClick={() => verdictMut.mutate({ verdict: v, rationale: '', version: f.verdictObj.version ?? 1 })}
                         disabled={verdictMut.isPending}
                       >
                         <span className="dot" style={{ background: VERDICT[v].c }} />
@@ -162,7 +188,7 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
                   })}
                   <button
                     className="vd-btn"
-                    onClick={() => verdictMut.mutate({ verdict: 'unmarked', rationale: '' })}
+                    onClick={() => verdictMut.mutate({ verdict: 'unmarked', rationale: '', version: f.verdictObj.version ?? 1 })}
                     disabled={verdictMut.isPending || f.verdictObj.verdict === 'unmarked'}
                   >
                     Сбросить

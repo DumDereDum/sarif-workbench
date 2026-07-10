@@ -29,7 +29,7 @@ def test_carry_over_verdict_survives_new_run(client, db_session, upload_run):
     finding_id = _first_finding_id(client, run_a["run_id"])
     client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "confirmed"},
+        json={"verdict": "true_positive", "rationale": "confirmed", "version": 1},
     )
 
     run_b = upload_run([spec_matched, spec_unmatched], repo=repo)
@@ -110,7 +110,7 @@ def test_carry_over_across_three_runs_appends_one_event_each(client, db_session,
 
     run_a = upload_run([spec], repo=repo)
     finding_id = _first_finding_id(client, run_a["run_id"])
-    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "false_positive"})
+    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "false_positive", "version": 1})
 
     run_b = upload_run([spec], repo=repo)
     run_c = upload_run([spec], repo=repo)

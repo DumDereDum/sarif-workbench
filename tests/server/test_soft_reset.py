@@ -30,9 +30,9 @@ def test_reset_counts_only_actually_marked_findings(client, upload_run):
     items = _findings(client, run["run_id"])
     assert len(items) == 3
 
-    resp = client.patch(f"/api/v1/findings/{items[0]['id']}/verdict", json={"verdict": "true_positive"})
+    resp = client.patch(f"/api/v1/findings/{items[0]['id']}/verdict", json={"verdict": "true_positive", "version": 1})
     assert resp.status_code == 200
-    resp = client.patch(f"/api/v1/findings/{items[1]['id']}/verdict", json={"verdict": "false_positive"})
+    resp = client.patch(f"/api/v1/findings/{items[1]['id']}/verdict", json={"verdict": "false_positive", "version": 1})
     assert resp.status_code == 200
     # items[2] остаётся unmarked
 
@@ -95,7 +95,7 @@ def test_reset_counts_shared_identity_once(client, db_session, upload_run):
     identity_ids = {f.identity_id for f in findings}
     assert len(identity_ids) == 1
 
-    resp = client.patch(f"/api/v1/findings/{items[0]['id']}/verdict", json={"verdict": "true_positive"})
+    resp = client.patch(f"/api/v1/findings/{items[0]['id']}/verdict", json={"verdict": "true_positive", "version": 1})
     assert resp.status_code == 200
 
     resp = client.post(f"/api/v1/runs/{run['run_id']}/reset")

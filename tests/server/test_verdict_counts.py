@@ -65,9 +65,11 @@ def test_concurrent_patches_converge_to_actual_verdict_distribution(client, uplo
     assigned = {item["id"]: verdict_cycle[i % len(verdict_cycle)] for i, item in enumerate(items)}
 
     def _patch(finding_id: str, verdict: str):
+        # T-38: каждая identity здесь патчится ровно один раз, начиная со
+        # свежего создания при upload_run — исходная версия всегда 1.
         resp = client.patch(
             f"/api/v1/findings/{finding_id}/verdict",
-            json={"verdict": verdict, "rationale": f"concurrent-{verdict}"},
+            json={"verdict": verdict, "rationale": f"concurrent-{verdict}", "version": 1},
         )
         assert resp.status_code == 200, resp.text
         return resp
@@ -133,8 +135,8 @@ def test_reset_and_analyze_counts_match_independently_computed_truth(
     items = _findings(client, run["run_id"])
     assert len(items) == 4
 
-    client.patch(f"/api/v1/findings/{items[0]['id']}/verdict", json={"verdict": "true_positive"})
-    client.patch(f"/api/v1/findings/{items[1]['id']}/verdict", json={"verdict": "false_positive"})
+    client.patch(f"/api/v1/findings/{items[0]['id']}/verdict", json={"verdict": "true_positive", "version": 1})
+    client.patch(f"/api/v1/findings/{items[1]['id']}/verdict", json={"verdict": "false_positive", "version": 1})
 
     resp = client.post(f"/api/v1/runs/{run['run_id']}/reset")
     assert resp.status_code == 200
@@ -351,7 +353,7 @@ def test_bare_recompute_without_prior_write_does_not_lose_concurrent_commit(clie
         try:
             resp = client.patch(
                 f"/api/v1/findings/{race_target_id}/verdict",
-                json={"verdict": "true_positive", "rationale": "concurrent commit landing in the gap"},
+                json={"verdict": "true_positive", "rationale": "concurrent commit landing in the gap", "version": 1},
             )
             assert resp.status_code == 200, resp.text
         except Exception as exc:  # noqa: BLE001

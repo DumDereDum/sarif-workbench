@@ -59,7 +59,7 @@ def test_analyze_default_does_not_touch_human_verdict(client, db_session, upload
 
     resp = client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "проверил руками"},
+        json={"verdict": "true_positive", "rationale": "проверил руками", "version": 1},
     )
     assert resp.status_code == 200
 
@@ -95,7 +95,7 @@ def test_analyze_override_rewrites_human_verdict_with_history(client, db_session
     run = upload_run([{"rule_id": "CWE-89", "uri": "src/db.py", "start_line": 42}], repo=repo)
     finding_id = _first_finding_id(client, run["run_id"])
 
-    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "true_positive"})
+    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "true_positive", "version": 1})
 
     events = _analyze(client, run["run_id"], override=True)
 
@@ -135,7 +135,7 @@ def test_analyze_mixed_run_skips_only_human_marked(client, db_session, upload_ru
     assert len(items) == 2
     human_id, other_id = items[0]["id"], items[1]["id"]
 
-    client.patch(f"/api/v1/findings/{human_id}/verdict", json={"verdict": "true_positive"})
+    client.patch(f"/api/v1/findings/{human_id}/verdict", json={"verdict": "true_positive", "version": 1})
 
     events = _analyze(client, run["run_id"])  # без override
 
@@ -163,7 +163,7 @@ def test_analyze_does_not_protect_human_unmarked(client, db_session, upload_run,
     finding_id = _first_finding_id(client, run["run_id"])
 
     # human поставил unmarked: source=human, но решения нет — не защищаем
-    resp = client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "unmarked"})
+    resp = client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "unmarked", "version": 1})
     assert resp.status_code == 200
     assert resp.json()["source"] == "human"
 

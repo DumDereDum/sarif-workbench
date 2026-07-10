@@ -16,7 +16,9 @@ def _unique_repo() -> str:
 
 
 def _set_verdict(client, finding_id: str, verdict: str) -> None:
-    resp = client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": verdict})
+    # T-38: каждый вызов здесь — единственный PATCH на свежую identity этого
+    # теста (version=1 после upload_run, до любых записей вердикта).
+    resp = client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": verdict, "version": 1})
     assert resp.status_code == 200, resp.text
 
 

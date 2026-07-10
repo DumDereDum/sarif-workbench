@@ -86,6 +86,11 @@ class FindingIdentity(Base):
     verdict_source = Column(String, nullable=True)  # human / ai / carried / reset
     rationale = Column(Text, nullable=True)
     needs_reconfirm = Column(Boolean, nullable=False, default=False)
+    # T-38: оптимистическая блокировка вердикта — инкрементируется в write_verdict
+    # на КАЖДЫЙ вызов (human/ai/carried/reset), не только human. PATCH-клиент
+    # присылает версию, прочитанную своим последним GET; расхождение с текущей
+    # версией identity → 409 (см. routers/findings.py::update_verdict).
+    version = Column(Integer, nullable=False, default=1)
     # атрибуты последнего AI-вердикта (prompt_id/prompt_version заполняет T-25)
     provider = Column(String, nullable=True)
     model = Column(String, nullable=True)

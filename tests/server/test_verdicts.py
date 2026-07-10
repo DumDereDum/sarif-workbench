@@ -219,13 +219,14 @@ def test_patch_verdict_writes_identity_and_event(client, db_session, upload_run)
 
     resp = client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "false_positive", "rationale": "sanitized upstream"},
+        json={"verdict": "false_positive", "rationale": "sanitized upstream", "version": 1},
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["verdict"] == "false_positive"
     assert body["source"] == "human"
     assert body["rationale"] == "sanitized upstream"
+    assert body["version"] == 2  # T-38: identity начинала с version=1, write_verdict инкрементирует
     assert len(body["history"]) == 1
     assert body["history"][0]["verdict"] == "false_positive"
     assert body["history"][0]["old_verdict"] == "unmarked"
@@ -254,8 +255,8 @@ def test_get_finding_serves_verdict_from_identity(client, upload_run):
     run = upload_run([{"rule_id": "CWE-89", "uri": "src/db.py", "start_line": 42}], repo=repo)
     finding_id = _first_finding_id(client, run["run_id"])
 
-    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "true_positive", "rationale": "r1"})
-    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "uncertain", "rationale": "r2"})
+    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "true_positive", "rationale": "r1", "version": 1})
+    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "uncertain", "rationale": "r2", "version": 2})
 
     detail = client.get(f"/api/v1/findings/{finding_id}").json()
     vd = detail["verdict"]
@@ -287,7 +288,7 @@ def test_reset_unmarks_identities_but_keeps_events(client, db_session, upload_ru
         repo=repo,
     )
     finding_id = _first_finding_id(client, run["run_id"])
-    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "true_positive"})
+    client.patch(f"/api/v1/findings/{finding_id}/verdict", json={"verdict": "true_positive", "version": 1})
 
     resp = client.post(f"/api/v1/runs/{run['run_id']}/reset")
     assert resp.status_code == 200

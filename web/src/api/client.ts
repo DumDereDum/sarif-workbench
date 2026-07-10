@@ -2,14 +2,20 @@ const BASE = '/api/v1'
 
 // Ошибка API с сохранённым машиночитаемым кодом (`error` в теле ответа),
 // когда UI должен различать причины 4xx (например `no_baseline` в diff-эндпоинте).
+// `detail` (T-38) — весь разобранный объект `detail` ответа как есть, когда это
+// словарь: для `version_conflict` (409 на PATCH .../verdict) в нём лежит
+// актуальное состояние находки под ключом `finding`, чтобы UI не падал молча,
+// а мог сразу показать пользователю, что изменилось (без лишнего round-trip'а).
 export class ApiError extends Error {
   status: number
   code?: string
-  constructor(message: string, status: number, code?: string) {
+  detail?: Record<string, unknown>
+  constructor(message: string, status: number, code?: string, detail?: Record<string, unknown>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.detail = detail
   }
 }
 
@@ -18,7 +24,7 @@ export class ApiError extends Error {
 // (см. server/swb_server/routers/*.py), но может быть и голой строкой (обычный
 // `HTTPException(404, "not found")`) или списком (стандартные pydantic-ошибки валидации
 // FastAPI) — в этих случаях machine-readable кода нет, используем только текст/статус.
-function parseErrorBody(body: unknown, fallback: string): { message: string; code?: string } {
+function parseErrorBody(body: unknown, fallback: string): { message: string; code?: string; detail?: Record<string, unknown> } {
   if (body && typeof body === 'object' && 'detail' in body) {
     const detail = (body as { detail: unknown }).detail
     if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
@@ -26,6 +32,7 @@ function parseErrorBody(body: unknown, fallback: string): { message: string; cod
       return {
         message: typeof d.message === 'string' ? d.message : fallback,
         code: typeof d.error === 'string' ? d.error : undefined,
+        detail: d,
       }
     }
     if (typeof detail === 'string') return { message: detail }
@@ -37,8 +44,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, init)
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    const { message, code } = parseErrorBody(body, res.statusText)
-    throw new ApiError(message, res.status, code)
+    const { message, code, detail } = parseErrorBody(body, res.statusText)
+    throw new ApiError(message, res.status, code, detail)
   }
   return res.json() as Promise<T>
 }
@@ -93,6 +100,7 @@ export interface Snippet {
 export interface VerdictObj {
   verdict: string; source: string | null; rationale: string | null
   provider: string | null; needs_reconfirm: boolean
+  version: number | null // T-38: оптимистическая блокировка — вернуть в PATCH .../verdict как есть
   history: Array<{ verdict: string; source: string | null; at: string }>
 }
 
@@ -151,11 +159,14 @@ export const api = {
   finding: (fid: string): Promise<unknown> =>
     req(`/findings/${fid}`),
 
-  setVerdict: (fid: string, verdict: string, rationale: string): Promise<unknown> =>
+  // version (T-38) — значение VerdictObj.version, прочитанное последним GET
+  // /findings/{id}; сервер сравнивает его с текущей версией identity и
+  // отвечает 409 version_conflict, если находка успела измениться под клиентом.
+  setVerdict: (fid: string, verdict: string, rationale: string, version: number): Promise<unknown> =>
     req(`/findings/${fid}/verdict`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verdict, rationale }),
+      body: JSON.stringify({ verdict, rationale, version }),
     }),
 
   resetVerdicts: (runId: string): Promise<{ reset: number }> =>

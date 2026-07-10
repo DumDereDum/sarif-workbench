@@ -55,7 +55,7 @@ def test_verdict_source_survives_single_carry_over(client, db_session, upload_ru
     finding_id = _first_finding_id(client, run_a["run_id"])
     client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "confirmed"},
+        json={"verdict": "true_positive", "rationale": "confirmed", "version": 1},
     )
 
     run_b = upload_run([spec], repo=repo)  # carry
@@ -89,7 +89,7 @@ def test_verdict_source_survives_three_carry_overs(client, db_session, upload_ru
     finding_id = _first_finding_id(client, run_a["run_id"])
     client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "confirmed"},
+        json={"verdict": "true_positive", "rationale": "confirmed", "version": 1},
     )
 
     upload_run([spec], repo=repo)  # carry 1
@@ -123,7 +123,7 @@ def test_ai_analyze_does_not_override_human_verdict_after_carry_overs(client, db
     finding_id = _first_finding_id(client, run_a["run_id"])
     client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "confirmed"},
+        json={"verdict": "true_positive", "rationale": "confirmed", "version": 1},
     )
 
     upload_run([spec], repo=repo)  # carry 1

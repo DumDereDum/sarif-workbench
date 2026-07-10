@@ -81,7 +81,7 @@ def test_reupload_same_sarif_different_meta_updates_meta_and_findings(client, db
     finding_id = _first_finding_id(client, run1["run_id"])
     patch_resp = client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "confirmed"},
+        json={"verdict": "true_positive", "rationale": "confirmed", "version": 1},
     )
     assert patch_resp.status_code == 200
 
@@ -147,7 +147,7 @@ def test_meta_updated_does_not_write_spurious_carried_event(client, db_session, 
     finding_id = _first_finding_id(client, run1["run_id"])
     patch_resp = client.patch(
         f"/api/v1/findings/{finding_id}/verdict",
-        json={"verdict": "true_positive", "rationale": "confirmed"},
+        json={"verdict": "true_positive", "rationale": "confirmed", "version": 1},
     )
     assert patch_resp.status_code == 200
 
