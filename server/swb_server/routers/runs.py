@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import case, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -116,6 +117,137 @@ async def _read_limited(upload: UploadFile, field: str) -> bytes:
     return b"".join(chunks)
 
 
+def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ingested: dict) -> None:
+    """Пишет Rule/Finding рана из ingest(); find-or-create identity по
+    (project_id, swb_id) — ADR 0001 §6. Общая для обычной загрузки и ветки
+    meta_updated (T-33, ADR §7) — та же логика для обеих.
+    """
+    for rule_id, info in ingested["rules"].items():
+        db.add(Rule(
+            run_id=run_id,
+            rule_id=rule_id,
+            name=info["name"],
+            description=info["description"],
+            help_uri=info["help_uri"],
+            default_severity=info["default_severity"],
+        ))
+
+    now = datetime.utcnow()
+    identities: dict[str, FindingIdentity] = {}
+    for fd in ingested["findings"]:
+        algo = fd.pop("fingerprint_algo")
+        level = fd.pop("fingerprint_level")
+        swb_id = fd["swb_id"]
+        identity = identities.get(swb_id)
+        if identity is None:
+            identity = (
+                db.query(FindingIdentity)
+                .filter(FindingIdentity.project_id == project_id, FindingIdentity.swb_id == swb_id)
+                .first()
+            )
+            if identity is None:
+                identity = FindingIdentity(
+                    project_id=project_id,
+                    swb_id=swb_id,
+                    algo=algo,
+                    level=level,
+                    first_seen_run_id=run_id,
+                    first_seen_at=now,
+                )
+                db.add(identity)
+                db.flush()
+            elif (identity.verdict or "unmarked") != "unmarked" and identity.last_seen_run_id != run_id:
+                # Совпадение с уже известной identity, несущей вердикт (T-21,
+                # ADR 0001 §6/§7): переносить нечего — вердикт уже лежит на
+                # identity и виден автоматически через join. Здесь только
+                # фиксируем событием, что он был применён к новому скану;
+                # old = new, rationale сохраняем как есть (не сбрасываем).
+                #
+                # `identity.last_seen_run_id != run_id` отсекает ложное
+                # срабатывание в ветке meta_updated (T-33, ADR §7): там
+                # тот же самый run_id повторно прогоняется через ingest после
+                # правки meta (свежие сниппеты/отпечатки) — это не новый скан,
+                # а переобработка уже виденного этим раном наблюдения, поэтому
+                # писать "перенесено при новом скане" было бы ложью в
+                # append-only истории. Для обычной загрузки run_id всегда
+                # свежий (строка runs ещё не существует), так что ни одна
+                # identity не может иметь last_seen_run_id == run_id заранее —
+                # проверка не меняет поведение carry-over между разными ранами.
+                write_verdict(
+                    db,
+                    identity,
+                    new_verdict=identity.verdict,
+                    source="carried",
+                    actor="system",
+                    rationale=identity.rationale,
+                    run_id=run_id,
+                )
+            identities[swb_id] = identity
+        identity.last_seen_run_id = run_id
+        identity.last_seen_at = now
+        db.add(Finding(run_id=run_id, identity_id=identity.id, **fd))
+
+
+def _dedup_response(
+    db: Session,
+    existing: Run,
+    sarif_bytes: bytes,
+    meta_bytes: bytes,
+    meta_data: dict,
+) -> dict:
+    """Идемпотентный ответ на повторную загрузку (project_id, sarif_sha256) — ADR 0001 §7.
+
+    Если сохранённая meta байтово совпадает с новой — чистый дедуп, без записи.
+    Если отличается (re-enrich со свежими сниппетами/отпечатками) — meta-блоб
+    заменяется, Rule/Finding рана пересоздаются в этой же транзакции повторным
+    ingest'ом с той же find-or-create identity логикой, что и обычная загрузка;
+    вердикты не теряются — они живут на identity, не на Finding.
+    """
+    saved_meta_bytes = load_blob(str(existing.meta_key))
+    if saved_meta_bytes == meta_bytes:
+        return {
+            "run_id": existing.id,
+            "project_id": existing.project_id,
+            "deduplicated": True,
+            "meta_updated": False,
+            "uploaded_at": existing.uploaded_at.isoformat() if existing.uploaded_at else None,
+            "finding_count": (existing.counts or {}).get("all", 0),
+            "counts": existing.counts or {},
+        }
+
+    try:
+        ingested = ingest(sarif_bytes, meta_data)
+    except MetaValidationError as exc:
+        raise HTTPException(422, {"error": "invalid_meta", "message": str(exc)})
+    except Exception as exc:
+        raise HTTPException(422, {"error": "invalid_sarif", "message": str(exc)})
+
+    save_blob(str(existing.meta_key), meta_bytes)
+    db.query(Finding).filter(Finding.run_id == existing.id).delete()
+    db.query(Rule).filter(Rule.run_id == existing.id).delete()
+
+    _create_rules_and_findings(db, run_id=str(existing.id), project_id=str(existing.project_id), ingested=ingested)
+
+    existing.tool = ingested["tool"]
+    existing.tool_version = ingested["tool_version"]
+    existing.counts = ingested["counts"]
+
+    # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
+    db.flush()
+    recompute_counts_by_verdict(db, str(existing.id))
+    db.commit()
+
+    return {
+        "run_id": existing.id,
+        "project_id": existing.project_id,
+        "deduplicated": True,
+        "meta_updated": True,
+        "uploaded_at": existing.uploaded_at.isoformat() if existing.uploaded_at else None,
+        "finding_count": ingested["counts"].get("all", 0),
+        "counts": ingested["counts"],
+    }
+
+
 @router.post("/runs", status_code=201)
 async def upload_run(
     sarif: UploadFile = File(...),
@@ -141,19 +273,10 @@ async def upload_run(
             {"error": "sha_mismatch", "message": f"SARIF sha256 mismatch: got {actual_sha[:8]}…, expected {expected_sha[:8]}…"},
         )
 
-    # Idempotency — same SARIF sha256 means the run is already in the DB
-    existing = db.query(Run).filter(Run.sarif_sha256 == actual_sha).first()
-    if existing:
-        return {
-            "run_id": existing.id,
-            "project_id": existing.project_id,
-            "deduplicated": True,
-            "uploaded_at": existing.uploaded_at.isoformat() if existing.uploaded_at else None,
-            "finding_count": (existing.counts or {}).get("all", 0),
-            "counts": existing.counts or {},
-        }
-
-    # Resolve / create project
+    # Resolve / create project — до дедуп-проверки: дедуп скопирован на
+    # проект (ADR 0001 §7, UNIQUE(project_id, sarif_sha256)), не глобальный —
+    # тот же SARIF в другом проекте это обычная новая загрузка, не молчаливый
+    # дубль. Определение проекта — из provenance.repo meta, как и раньше.
     provenance = meta_data.get("provenance", {})
     repo: str = provenance.get("repo", "unknown")
     project_id = re.sub(r"[^a-z0-9-]", "-", repo.lower()) if repo else "unknown"
@@ -168,6 +291,15 @@ async def upload_run(
         )
         db.add(project)
         db.flush()
+
+    # Idempotency — тот же sarif_sha256 в том же проекте (ADR 0001 §7)
+    existing = (
+        db.query(Run)
+        .filter(Run.project_id == project_id, Run.sarif_sha256 == actual_sha)
+        .first()
+    )
+    if existing:
+        return _dedup_response(db, existing, sarif_bytes, meta_bytes, meta_data)
 
     # Parse SARIF + meta
     try:
@@ -199,63 +331,24 @@ async def upload_run(
         counts=ingested["counts"],
     )
     db.add(run)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Гонка двух одинаковых загрузок (ADR 0001 §7): конкурент уже
+        # закоммитил тот же (project_id, sarif_sha256) между нашей
+        # дедуп-проверкой выше и этим flush — откатываем и отдаём тот же
+        # идемпотентный ответ, что и обычный дедуп, а не 500 (T-33).
+        db.rollback()
+        raced = (
+            db.query(Run)
+            .filter(Run.project_id == project_id, Run.sarif_sha256 == actual_sha)
+            .first()
+        )
+        if raced is None:
+            raise
+        return _dedup_response(db, raced, sarif_bytes, meta_bytes, meta_data)
 
-    # Rules
-    for rule_id, info in ingested["rules"].items():
-        db.add(Rule(
-            run_id=run_id,
-            rule_id=rule_id,
-            name=info["name"],
-            description=info["description"],
-            help_uri=info["help_uri"],
-            default_severity=info["default_severity"],
-        ))
-
-    # Findings: find-or-create identity по (project_id, swb_id) — ADR 0001 §6
-    now = datetime.utcnow()
-    identities: dict[str, FindingIdentity] = {}
-    for fd in ingested["findings"]:
-        algo = fd.pop("fingerprint_algo")
-        level = fd.pop("fingerprint_level")
-        swb_id = fd["swb_id"]
-        identity = identities.get(swb_id)
-        if identity is None:
-            identity = (
-                db.query(FindingIdentity)
-                .filter(FindingIdentity.project_id == project_id, FindingIdentity.swb_id == swb_id)
-                .first()
-            )
-            if identity is None:
-                identity = FindingIdentity(
-                    project_id=project_id,
-                    swb_id=swb_id,
-                    algo=algo,
-                    level=level,
-                    first_seen_run_id=run_id,
-                    first_seen_at=now,
-                )
-                db.add(identity)
-                db.flush()
-            elif (identity.verdict or "unmarked") != "unmarked":
-                # Совпадение с уже известной identity, несущей вердикт (T-21,
-                # ADR 0001 §6/§7): переносить нечего — вердикт уже лежит на
-                # identity и виден автоматически через join. Здесь только
-                # фиксируем событием, что он был применён к новому скану;
-                # old = new, rationale сохраняем как есть (не сбрасываем).
-                write_verdict(
-                    db,
-                    identity,
-                    new_verdict=identity.verdict,
-                    source="carried",
-                    actor="system",
-                    rationale=identity.rationale,
-                    run_id=run_id,
-                )
-            identities[swb_id] = identity
-        identity.last_seen_run_id = run_id
-        identity.last_seen_at = now
-        db.add(Finding(run_id=run_id, identity_id=identity.id, **fd))
+    _create_rules_and_findings(db, run_id=run_id, project_id=project_id, ingested=ingested)
 
     # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
     # flush() нужен явно: Finding-строки выше только добавлены в сессию

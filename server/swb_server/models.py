@@ -36,6 +36,7 @@ class Project(Base):
 
 class Run(Base):
     __tablename__ = "runs"
+    __table_args__ = (UniqueConstraint("project_id", "sarif_sha256", name="uq_run_project_sha256"),)
     __allow_unmapped__ = True
 
     id = Column(String, primary_key=True, default=lambda: _uid("r-"))
@@ -48,7 +49,9 @@ class Run(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     sarif_key = Column(String)
     meta_key = Column(String)
-    sarif_sha256 = Column(String, unique=True)
+    # дедуп скопирован на проект (ADR 0001 §7) — уникальность составная, не
+    # глобальная: тот же SARIF в другом проекте — обычная новая загрузка.
+    sarif_sha256 = Column(String)
     counts = Column(JSON)
     counts_by_verdict = Column(JSON)
 
