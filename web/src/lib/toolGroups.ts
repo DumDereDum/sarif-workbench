@@ -14,6 +14,17 @@ function normalizeToolKey(tool: string | null | undefined): string {
   return (tool ?? '').trim().toLowerCase()
 }
 
+// T-3.5.3: пустой/отсутствующий Run.tool у всех ранов группы нормализуется
+// `normalizeToolKey` в ключ `''` (группа-заглушка) — рендерить в UI пустую
+// строку в колонке «Инструмент» выглядело бы как баг, а не как осмысленная
+// группа. Критерий "пусто" здесь намеренно тот же, что и у `normalizeToolKey`
+// (trim + пустая строка), чтобы обе функции не разошлись в том, что считается
+// отсутствующим именем инструмента.
+export function fmtToolName(tool: string | null | undefined): string {
+  const t = (tool ?? '').trim()
+  return t || '(unknown)'
+}
+
 // `Date.parse` невалидной строки даёт `NaN`, а `NaN !== NaN` истинно в JS —
 // без нормализации это ломает тай-брейк (см. review T-3.5.1 п.2): считаем
 // невалидную/отсутствующую дату эквивалентной "нет даты", чтобы обе стороны
@@ -50,4 +61,29 @@ export function groupRunsByTool(runs: RunSummary[]): ToolGroup[] {
     }
   }
   return Array.from(byKey.entries()).map(([key, run]) => ({ ...run, key }))
+}
+
+// T-3.5.3: рендер T-3.5.2 использует естественный порядок Map (insertion
+// order), недетерминированный между рендерами относительно порядка ранов в
+// `data.runs`. `counts.all` — то же поле, которое таблица истории ранов уже
+// показывает в колонке «Находок» (см. ProjectRuns.tsx), поэтому сортировка
+// переиспользует его, а не считает "итого находок" заново.
+function totalFindings(group: ToolGroup): number {
+  return group.counts.all ?? 0
+}
+
+/**
+ * Сортирует группы инструментов для стабильного порядка строк панели
+ * сравнения: по убыванию `counts.all` последнего рана группы, тай-брейк — по
+ * возрастанию нормализованного ключа инструмента (алфавитно). Возвращает
+ * новый массив, не мутирует вход.
+ */
+export function sortToolGroups(groups: ToolGroup[]): ToolGroup[] {
+  return [...groups].sort((a, b) => {
+    const byCount = totalFindings(b) - totalFindings(a)
+    if (byCount !== 0) return byCount
+    if (a.key < b.key) return -1
+    if (a.key > b.key) return 1
+    return 0
+  })
 }

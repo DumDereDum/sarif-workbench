@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type RunSummary } from '../api/client'
 import { SEV_ORDER, SEV } from '../lib/severity'
 import { VD_ORDER, VERDICT } from '../lib/verdict'
-import { groupRunsByTool } from '../lib/toolGroups'
+import { groupRunsByTool, sortToolGroups, fmtToolName } from '../lib/toolGroups'
 
 function SevBar({ counts }: { counts: Partial<Record<string, number>> }) {
   const total = SEV_ORDER.reduce((s, k) => s + (counts[k] ?? 0), 0) || 1
@@ -83,7 +83,9 @@ export default function ProjectRuns() {
   const baselineRunId = project.baseline_run_id
   const runsDesc = [...runs].reverse()
   // T-3.5.1: одна «текущая» строка на инструмент — используется панелью сравнения ниже.
-  const toolGroups = groupRunsByTool(runs)
+  // T-3.5.3: сортировка делает порядок строк детерминированным между рендерами
+  // (Map-группировка сама по себе порядок не гарантирует).
+  const toolGroups = sortToolGroups(groupRunsByTool(runs))
 
   return (
     <>
@@ -126,7 +128,7 @@ export default function ProjectRuns() {
                   const cvd = g.counts_by_verdict as Record<string, number> ?? {}
                   return (
                     <tr key={g.key} onClick={() => navigate(`/projects/${projectId}/runs/${g.id}`)}>
-                      <td className="muted">{g.tool}{g.tool_version ? ` ${g.tool_version}` : ''}</td>
+                      <td className="muted">{fmtToolName(g.tool)}{g.tool_version ? ` ${g.tool_version}` : ''}</td>
                       <td>
                         <span className="run-link">{g.commit}</span>
                         <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{fmtDate(g.scanned_at ?? g.uploaded_at)}</div>
