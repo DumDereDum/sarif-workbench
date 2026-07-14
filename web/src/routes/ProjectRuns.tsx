@@ -82,7 +82,7 @@ export default function ProjectRuns() {
   const { project, runs } = data
   const baselineRunId = project.baseline_run_id
   const runsDesc = [...runs].reverse()
-  // T-3.5.1: одна «текущая» строка на инструмент — панель сравнения (T-3.5.2) ещё не рендерится.
+  // T-3.5.1: одна «текущая» строка на инструмент — используется панелью сравнения ниже.
   const toolGroups = groupRunsByTool(runs)
 
   return (
@@ -100,6 +100,57 @@ export default function ProjectRuns() {
           <b>Бейзлайн сравнения</b> — прогон-эталон, относительно которого считается дельта и переносится разметка. Отметьте звёздочкой нужный прогон.
         </div>
       </div>
+
+      {toolGroups.length > 1 && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div className="panel-h">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/>
+              <path d="M6 9v6a3 3 0 003 3h3M18 15V9a3 3 0 00-3-3h-3"/>
+            </svg>
+            Сравнение инструментов
+          </div>
+          <div className="tbl-wrap" style={{ maxHeight: 'none' }}>
+            <table className="runs-tbl">
+              <thead>
+                <tr>
+                  <th>Инструмент</th>
+                  <th>Последний ран</th>
+                  <th>Severity</th>
+                  <th>Триаж</th>
+                </tr>
+              </thead>
+              <tbody>
+                {toolGroups.map(g => {
+                  const counts = g.counts as Record<string, number> ?? {}
+                  const cvd = g.counts_by_verdict as Record<string, number> ?? {}
+                  return (
+                    <tr key={g.key} onClick={() => navigate(`/projects/${projectId}/runs/${g.id}`)}>
+                      <td className="muted">{g.tool}{g.tool_version ? ` ${g.tool_version}` : ''}</td>
+                      <td>
+                        <span className="run-link">{g.commit}</span>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{fmtDate(g.scanned_at ?? g.uploaded_at)}</div>
+                      </td>
+                      <td style={{ minWidth: 130 }}>
+                        <SevBar counts={counts} />
+                        <div className="sevleg">
+                          {SEV_ORDER.filter(s => counts[s]).map(s => (
+                            <span key={s} style={{ color: SEV[s].c }}>{counts[s]}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ minWidth: 130 }}>
+                        <VBar counts={cvd} />
+                        <div className="sevleg muted">{triagePct(cvd)}% размечено</div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <div className="tbl-wrap" style={{ maxHeight: 'none' }}>
