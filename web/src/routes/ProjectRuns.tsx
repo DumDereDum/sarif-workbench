@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type RunSummary } from '../api/client'
 import { SEV_ORDER, SEV } from '../lib/severity'
 import { VD_ORDER, VERDICT } from '../lib/verdict'
+import { groupRunsByTool } from '../lib/toolGroups'
 
 function SevBar({ counts }: { counts: Partial<Record<string, number>> }) {
   const total = SEV_ORDER.reduce((s, k) => s + (counts[k] ?? 0), 0) || 1
@@ -81,6 +82,8 @@ export default function ProjectRuns() {
   const { project, runs } = data
   const baselineRunId = project.baseline_run_id
   const runsDesc = [...runs].reverse()
+  // T-3.5.1: одна «текущая» строка на инструмент — панель сравнения (T-3.5.2) ещё не рендерится.
+  const toolGroups = groupRunsByTool(runs)
 
   return (
     <>

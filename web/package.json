@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "rm -rf .test-out && tsc -p tsconfig.test.json && printf '{\"type\":\"commonjs\"}' > .test-out/package.json && node --test .test-out/lib/toolGroups.test.js"
   },
   "dependencies": {
     "react": "^18.3.1",

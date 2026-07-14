@@ -238,6 +238,7 @@ server/data/
 web/dist/
 web/node_modules/
 web/tsconfig.tsbuildinfo
+web/.test-out/
 
 # Docker env overrides
 .env
