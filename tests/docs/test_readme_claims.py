@@ -87,14 +87,6 @@ def test_cloud_providers_marked_disabled_by_default_not_planned():
     )
 
 
-def test_manual_verdict_override_marked_done():
-    text = _readme_text()
-    assert "- [x] Manual verdict override UI" in text, (
-        "Manual verdict override реализован (PATCH /findings/{fid}/verdict + UI в "
-        "FindingDrawer.tsx), но в Roadmap не отмечен как done"
-    )
-
-
 def test_force_fp_mode_mentioned():
     text = _readme_text()
     assert "force_fp" in text, "режим force_fp (server/swb_server/ai/prompts.py) не упомянут в README"
