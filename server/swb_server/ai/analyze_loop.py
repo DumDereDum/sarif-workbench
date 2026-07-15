@@ -164,10 +164,15 @@ async def run_analysis(
                 "[analyze] [%d/%d] finding=%s  verdict=%s  tokens_this=%d  tokens_total=%d",
                 idx, total, finding.id, verdict, result.get("tokens", 0), tokens_total,
             )
-            logger.debug("[analyze] [%d/%d] raw_response:\n%s", idx, total, raw_content)
+            # T-43: raw_content/rationale are LLM output built from the
+            # finding's source snippet (ai/prompts.py) and can quote it back
+            # verbatim — log only their length, never the text, at any level.
             logger.debug(
-                "[analyze] [%d/%d] parsed  verdict=%s  rationale=%s",
-                idx, total, verdict, rationale,
+                "[analyze] [%d/%d] raw_response_len=%d chars", idx, total, len(raw_content),
+            )
+            logger.debug(
+                "[analyze] [%d/%d] parsed  verdict=%s  rationale_len=%d chars",
+                idx, total, verdict, len(rationale),
             )
 
             # T-32 (остаточный риск T-24): между постановкой в очередь этой

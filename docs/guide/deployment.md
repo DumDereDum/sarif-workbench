@@ -29,7 +29,10 @@ docker compose logs -f     # follow server logs
 
 ### Debug mode
 
-To see full LLM request / response payloads in the logs:
+`LOG_LEVEL=DEBUG` adds extra request/response *metadata* to the logs: finding
+id, prompt/response lengths, latency, HTTP status, token counts, provider and
+model name. Prompt/response **content** — source snippets, LLM rationale
+text, API keys — is never written to logs at any level, DEBUG included (T-43).
 
 ```bash
 make debug

@@ -19,7 +19,8 @@ down:
 logs:
 	docker compose logs -f server
 
-## Поднять с максимальным дебагом (полные запросы/ответы к LLM)
+## Поднять с LOG_LEVEL=DEBUG (метаданные запросов/ответов к LLM: длины,
+## латентность, статус, токены — без содержимого промптов/ответов и ключей, T-43)
 debug:
 	LOG_LEVEL=DEBUG docker compose up
 

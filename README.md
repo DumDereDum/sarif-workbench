@@ -144,7 +144,8 @@ INFO    web     : http://localhost:8000/projects/billing-service/runs/r-a1b2c3d4
 docker compose up           # start (hot reload)
 docker compose down         # stop
 docker compose logs -f      # server logs
-make debug                  # start with LOG_LEVEL=DEBUG (full LLM request/response logs)
+make debug                  # start with LOG_LEVEL=DEBUG (extra request/response *metadata* — lengths,
+                             # latency, HTTP status, token counts; never prompt/response content or api_key, see T-43)
 ```
 
 ### Production

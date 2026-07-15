@@ -24,6 +24,34 @@ def _mask_key(key: str) -> str:
     return key[:4] + "..." + key[-4:]
 
 
+def _extract_error_message(response: httpx.Response) -> str:
+    """Human-readable text for the RuntimeError raised on a non-200 response.
+
+    T-43: this message is not just logged here — it flows *out* of this
+    function inside the exception, into `analyze_loop.py`'s generic
+    `except Exception` handler, which both logs it at ERROR level (via
+    `str(exc)`) and forwards it verbatim to the client in the SSE `error`
+    event's `"message"` field. So it must never carry raw, unvetted
+    response-body text — only a provider's own well-formed
+    `{"error": {"message": ...}}` field (the OpenAI-compatible error
+    contract every provider in the registry speaks) is trusted enough to
+    surface as-is. Anything else — a non-JSON body, or JSON missing that
+    field — collapses to a length-only placeholder instead of being sliced
+    and included verbatim.
+    """
+    try:
+        data = response.json()
+    except Exception:
+        return f"(non-JSON error body, {len(response.text)} chars)"
+    if isinstance(data, dict):
+        err = data.get("error")
+        if isinstance(err, dict):
+            message = err.get("message")
+            if isinstance(message, str) and message:
+                return message
+    return f"(error body without 'error.message', {len(response.text)} chars)"
+
+
 async def call_openai_compatible(
     base_url: str,
     api_key: str,
@@ -49,12 +77,16 @@ async def call_openai_compatible(
         "Authorization": f"Bearer {api_key.strip()}",
     }
 
+    # T-43: only metadata is ever logged here — id/lengths/latency/status/
+    # tokens/provider — never prompt or response *content*. The prompt
+    # carries the finding's source snippet (see ai/prompts.py) and the
+    # response can quote it back, so neither may reach the log file, not
+    # even at DEBUG. `_mask_key` keeps the api_key itself out too.
     logger.debug(
-        "[%s] REQUEST  url=%s  model=%s  api_key=%s  temperature=0.1  max_tokens=512",
-        provider_name, url, model, _mask_key(api_key),
+        "[%s] REQUEST  url=%s  model=%s  api_key=%s  temperature=0.1  max_tokens=512  "
+        "system_len=%d  user_len=%d",
+        provider_name, url, model, _mask_key(api_key), len(system), len(user),
     )
-    logger.debug("[%s] system_prompt (%d chars):\n%s", provider_name, len(system), system)
-    logger.debug("[%s] user_message  (%d chars):\n%s", provider_name, len(user), user)
 
     t0 = time.monotonic()
     try:
@@ -84,22 +116,21 @@ async def call_openai_compatible(
 
     elapsed = time.monotonic() - t0
 
+    # T-43: response headers/body are metadata-only here (length, not text).
+    # Headers in particular are skipped rather than dumped wholesale — a
+    # provider echoing `Authorization` back would otherwise leak the api_key
+    # into the log even though the request-side log already masks it.
     logger.debug(
-        "[%s] HTTP %d  elapsed=%.2fs  headers=%s",
-        provider_name, response.status_code, elapsed, dict(response.headers),
+        "[%s] HTTP %d  elapsed=%.2fs  body_len=%d",
+        provider_name, response.status_code, elapsed, len(response.text),
     )
-    logger.debug("[%s] response_body:\n%s", provider_name, response.text[:2000])
 
     if response.status_code != 200:
         logger.error(
-            "[%s] API ERROR  status=%d  model=%s  body=%s",
-            provider_name, response.status_code, model, response.text[:500],
+            "[%s] API ERROR  status=%d  model=%s  body_len=%d",
+            provider_name, response.status_code, model, len(response.text),
         )
-        try:
-            err = response.json().get("error", {})
-            msg = err.get("message", response.text[:200])
-        except Exception:
-            msg = response.text[:200]
+        msg = _extract_error_message(response)
         raise RuntimeError(f"Провайдер {provider_name} вернул {response.status_code}: {msg}")
 
     data = response.json()
@@ -113,6 +144,6 @@ async def call_openai_compatible(
         "[%s] OK  model=%s  elapsed=%.2fs  tokens=prompt:%d+completion:%d=%d",
         provider_name, model, elapsed, tokens_prompt, tokens_completion, tokens_total,
     )
-    logger.debug("[%s] response_content (%d chars):\n%s", provider_name, len(content), content)
+    logger.debug("[%s] response_content_len=%d chars", provider_name, len(content))
 
     return {"content": content, "tokens": tokens_total}
