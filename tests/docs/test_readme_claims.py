@@ -2,10 +2,11 @@
 
 Регрессионные проверки на конкретные несоответствия, найденные при аудите:
 - ссылка на несуществующий cli/swb_cli.spec;
-- безусловные заявления про полный офлайн-режим (сейчас единственный AI-провайдер
-  облачный DeepSeek);
-- локальные LLM-провайдеры и сравнение с baseline поданы как готовые, хотя не
-  реализованы;
+- безусловные заявления про полный офлайн-режим;
+- сравнение с baseline подано как готовое, хотя не реализовано;
+- (T-42) облачные AI-провайдеры не должны подаваться как включённые без оговорок —
+  README обязан отражать disabled-by-default/opt-in модель, а не "planned"
+  (локальный провайдер — реальный дефолт с T-42, это больше не "planned");
 - заявленное число тестов не должно превышать фактическое количество собранных
   pytest-тестов;
 - режим `force_fp` должен быть упомянут в описании AI-триажа.
@@ -55,17 +56,35 @@ def test_no_unconditional_offline_claims():
             ), f"строка про offline без оговорки о текущем состоянии: {line!r}"
 
 
-def test_local_providers_and_baseline_marked_planned():
+def test_baseline_comparison_marked_planned():
     text = _readme_text()
-    assert "vLLM, Ollama, GigaChat, YandexGPT" in text
-    # Обе строки, где упоминаются локальные провайдеры, должны быть помечены как planned.
-    for line in text.splitlines():
-        if "GigaChat" in line and "YandexGPT" in line and "|" in line:
-            assert "planned" in line.lower(), f"локальные провайдеры не помечены planned: {line!r}"
-
     for line in text.splitlines():
         if "Run comparison against a baseline" in line:
             assert "planned" in line.lower(), f"baseline-сравнение не помечено planned: {line!r}"
+
+
+def test_cloud_providers_marked_disabled_by_default_not_planned():
+    """T-42: локальный AI-провайдер (Ollama) — реальный дефолт из коробки, а не
+    "planned" — README не должен больше обещать локальные провайдеры как будущее.
+    Облачные провайдеры (DeepSeek и т.п.) поддержаны тем же реестром, но должны
+    быть явно описаны как disabled-by-default / opt-in, не как готовые без оговорок."""
+    text = _readme_text()
+
+    perimeter_lines = [
+        line for line in text.splitlines() if "Code must not leave the security perimeter" in line
+    ]
+    assert perimeter_lines, "не найдена строка про security perimeter в таблице 'What it does'"
+    for line in perimeter_lines:
+        assert "planned" not in line.lower(), (
+            f"локальный провайдер работает уже сегодня (T-42) — не должен быть помечен planned: {line!r}"
+        )
+        assert "disabled by default" in line, (
+            f"строка про периметр не отмечает облачные провайдеры disabled by default: {line!r}"
+        )
+
+    assert "SWB_ALLOW_REMOTE_PROVIDERS" in text, (
+        "README не документирует флаг opt-in для удалённых провайдеров (T-42)"
+    )
 
 
 def test_manual_verdict_override_marked_done():

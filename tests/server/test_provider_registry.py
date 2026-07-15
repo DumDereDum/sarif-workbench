@@ -2,6 +2,11 @@
 `if provider == "deepseek"`, и единая OpenAI-совместимая реализация HTTP-клиента
 (DeepSeek/vLLM/Ollama различаются данными в реестре, не кодом).
 
+T-42: локальный дефолт + remote-провайдеры — opt-in за двумя независимыми
+воротами (`SWB_ALLOW_REMOTE_PROVIDERS` + `SWB_REMOTE_PROVIDER_ALLOWLIST`),
+проверяемыми в `get_provider()` — единственной точке входа, через которую
+проходит `call_llm`.
+
 HTTP замокан через `httpx.MockTransport`, подставленный вместо
 `httpx.AsyncClient` в `openai_compatible.py` — ни один настоящий сетевой
 вызов наружу не уходит.
@@ -39,21 +44,24 @@ def _ok_response(content: str = "Verdict: uncertain\nRationale: r") -> dict:
 
 @pytest.fixture(autouse=True)
 def _clean_provider_env(monkeypatch):
-    """Реестр читается из env на каждый вызов (T-41) — не даём тестам
+    """Реестр читается из env на каждый вызов (T-41/T-42) — не даём тестам
     наследовать конфиг друг от друга или от окружения запуска."""
     monkeypatch.delenv("SWB_AI_PROVIDERS", raising=False)
     monkeypatch.delenv("SWB_AI_PROVIDERS_FILE", raising=False)
+    monkeypatch.delenv("SWB_ALLOW_REMOTE_PROVIDERS", raising=False)
+    monkeypatch.delenv("SWB_REMOTE_PROVIDER_ALLOWLIST", raising=False)
 
 
 # ── реестр строится из конфига (env/файл), а не хардкода ──────────────────
 
 
-def test_default_registry_has_deepseek_only():
+def test_default_registry_is_local_only():
+    """T-42: дефолтный сконфигурированный провайдер — локальный, не облачный."""
     registry = providers.load_registry()
 
-    assert set(registry) == {"deepseek"}
-    assert registry["deepseek"].base_url == "https://api.deepseek.com"
-    assert registry["deepseek"].local is False
+    assert set(registry) == {"ollama"}
+    assert registry["ollama"].base_url == "http://localhost:11434/v1"
+    assert registry["ollama"].local is True
 
 
 def test_registry_from_env_json(monkeypatch):
@@ -90,7 +98,10 @@ def test_registry_from_file_takes_precedence_over_env(tmp_path, monkeypatch):
 
 
 def test_get_provider_unknown_raises_with_available_list(monkeypatch):
-    monkeypatch.setenv("SWB_AI_PROVIDERS", json.dumps([{"name": "only-one", "base_url": "http://x"}]))
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "only-one", "base_url": "http://x", "local": True}]),
+    )
 
     with pytest.raises(ValueError, match="only-one"):
         providers.get_provider("does-not-exist")
@@ -118,7 +129,9 @@ def test_call_llm_hits_configured_base_url_local_provider(monkeypatch):
     assert result == {"content": "Verdict: uncertain\nRationale: r", "tokens": 15}
 
 
-def test_call_llm_hits_configured_base_url_remote_deepseek(monkeypatch):
+def test_call_llm_hits_configured_base_url_remote_deepseek_when_allowed(monkeypatch):
+    """T-42: remote provider is reachable once BOTH the flag and the
+    allowlist explicitly permit it — not just because it's in the registry."""
     captured: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -127,7 +140,14 @@ def test_call_llm_hits_configured_base_url_remote_deepseek(monkeypatch):
         return httpx.Response(200, json=_ok_response("Verdict: true_positive\nRationale: ok"))
 
     _install_mock_transport(monkeypatch, handler)
-    # без SWB_AI_PROVIDERS[_FILE] — встроенный дефолт (deepseek), не спецкод.
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps(
+            [{"name": "deepseek", "base_url": "https://api.deepseek.com", "local": False, "default_model": "deepseek-chat"}]
+        ),
+    )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.deepseek.com")
 
     result = asyncio.run(providers.call_llm("deepseek", "sk-test", "deepseek-chat", "sys", "user"))
 
@@ -138,7 +158,9 @@ def test_call_llm_hits_configured_base_url_remote_deepseek(monkeypatch):
 
 def test_call_llm_parses_identically_across_two_configured_providers(monkeypatch):
     """Verify T-41: локальный (localhost) и облачный провайдер конфигурируются
-    как данные и проходят через один и тот же HTTP-код — различается только URL."""
+    как данные и проходят через один и тот же HTTP-код — различается только URL.
+    T-42: облачный провайдер требует явного opt-in (флаг + allowlist), иначе
+    этот тест сам по себе проверял бы поведение, которое T-42 запрещает."""
 
     seen_urls: list[str] = []
 
@@ -156,6 +178,8 @@ def test_call_llm_parses_identically_across_two_configured_providers(monkeypatch
             ]
         ),
     )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.example.com")
 
     r1 = asyncio.run(providers.call_llm("vllm-local", "k", "m", "s", "u"))
     r2 = asyncio.run(providers.call_llm("cloud-x", "k", "m", "s", "u"))
@@ -167,6 +191,87 @@ def test_call_llm_parses_identically_across_two_configured_providers(monkeypatch
         "http://localhost:8000/v1/chat/completions",
         "https://api.example.com/chat/completions",
     ]
+
+
+# ── T-42: remote providers are opt-in, gated by flag + host allowlist ─────
+
+
+def test_remote_provider_blocked_by_default_no_network_call(monkeypatch):
+    """Flag off (default) → remote provider call raises before any HTTP
+    request is attempted, even though it exists in the registry."""
+    called = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["count"] += 1
+        return httpx.Response(200, json=_ok_response())
+
+    _install_mock_transport(monkeypatch, handler)
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "cloud-x", "base_url": "https://api.example.com", "local": False}]),
+    )
+    # SWB_ALLOW_REMOTE_PROVIDERS not set — default false (see _clean_provider_env).
+
+    with pytest.raises(PermissionError, match="cloud-x"):
+        asyncio.run(providers.call_llm("cloud-x", "k", "m", "s", "u"))
+
+    assert called["count"] == 0, "remote call must not reach the network when disabled"
+
+
+def test_remote_provider_blocked_when_flag_on_but_host_not_allowlisted(monkeypatch):
+    """Flag on but allowlist empty/mismatched → still blocked (SSRF guard)."""
+    called = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["count"] += 1
+        return httpx.Response(200, json=_ok_response())
+
+    _install_mock_transport(monkeypatch, handler)
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "cloud-x", "base_url": "https://api.example.com", "local": False}]),
+    )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "some-other-host.example")
+
+    with pytest.raises(PermissionError, match="allowlist"):
+        asyncio.run(providers.call_llm("cloud-x", "k", "m", "s", "u"))
+
+    assert called["count"] == 0
+
+
+def test_remote_provider_not_in_available_list_when_disabled(monkeypatch):
+    """Disabled remote provider is not just uncallable — it's also not
+    offered as an "available" option to a caller who names the wrong provider."""
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps(
+            [
+                {"name": "ollama", "base_url": "http://localhost:11434/v1", "local": True},
+                {"name": "cloud-x", "base_url": "https://api.example.com", "local": False},
+            ]
+        ),
+    )
+    # remote disabled by default
+
+    with pytest.raises(ValueError) as excinfo:
+        providers.get_provider("does-not-exist")
+
+    assert "ollama" in str(excinfo.value)
+    assert "cloud-x" not in str(excinfo.value)
+
+
+def test_local_provider_unaffected_by_remote_gate(monkeypatch):
+    """Local providers bypass the flag/allowlist entirely."""
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "ollama", "base_url": "http://localhost:11434/v1", "local": True}]),
+    )
+    # SWB_ALLOW_REMOTE_PROVIDERS / allowlist both unset.
+
+    config = providers.get_provider("ollama")
+
+    assert config.name == "ollama"
 
 
 def test_call_openai_compatible_strips_trailing_slash_in_base_url(monkeypatch):

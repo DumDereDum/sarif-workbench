@@ -7,8 +7,10 @@
 [![Docs](https://img.shields.io/badge/docs-dumderdum.github.io-blue)](https://dumderdum.github.io/sarif-workbench/)
 
 Browse results from CodeQL, Semgrep, Svace, Checkmarx, or any SARIF 2.1.0-compatible analyzer.
-Triage findings with AI assistance (DeepSeek today; GigaChat, YandexGPT, vLLM, Ollama are planned — see Roadmap).
-Export PDF reports. Fully offline / air-gapped operation is a roadmap goal — the current AI triage step calls the cloud DeepSeek API.
+Triage findings with AI assistance against any OpenAI-compatible endpoint (vLLM, Ollama — local by
+default; DeepSeek and other cloud providers are available as an explicit opt-in — see below).
+Export PDF reports. AI triage is the only feature that can reach the network, and by default it
+only reaches `localhost` — cloud providers are disabled unless you turn them on.
 
 **[Documentation →](https://dumderdum.github.io/sarif-workbench/)**
 
@@ -51,7 +53,7 @@ make sample   # enriches and uploads samples/cpp-bank/report.sarif
 | Problem | Solution |
 |---|---|
 | Hundreds of SAST findings per run | AI triage classifies each as **TP / FP / Uncertain** (built-in `honest` prompt; a `force_fp` preset is also available for testing/formal-report workflows — see [`ai/prompts.py`](server/swb_server/ai/prompts.py)) |
-| Code must not leave the security perimeter | Local LLM providers: vLLM, Ollama, GigaChat, YandexGPT — **planned**, not yet implemented (only the cloud DeepSeek API works today) |
+| Code must not leave the security perimeter | The AI provider registry defaults to a local endpoint (Ollama, `http://localhost:11434/v1`); any OpenAI-compatible server (vLLM, Ollama, etc.) works via config. Cloud providers (DeepSeek, GigaChat, YandexGPT, ...) are supported by the same registry but are **disabled by default** — see [AI providers](#ai-providers) below |
 | No cross-run tracking | Run comparison against a baseline (new / closed / unchanged) — **planned**, not yet implemented |
 | Ad-hoc reports in spreadsheets | One-click **PDF export** in Svacer-compatible format |
 
@@ -77,7 +79,11 @@ Three components:
 **Key invariants:**
 - Original SARIF is **immutable** — stored byte-for-byte, never rewritten
 - Data reaches the server **only via CLI** — the web UI does not upload
-- Ingestion, browsing, PDF export, and manual triage need no network access. AI triage is the exception: it sends finding details to the cloud DeepSeek API using the API key you provide when starting an analysis run. Fully offline operation via local LLM providers is planned — see Roadmap.
+- Ingestion, browsing, PDF export, and manual triage need no network access. AI triage is the only
+  feature that talks to a network endpoint, and by default that endpoint is `localhost` (see
+  [AI providers](#ai-providers)): out of the box, the built-in provider is a local Ollama-compatible
+  server, and remote/cloud providers are refused with an explicit error unless you opt in with
+  `SWB_ALLOW_REMOTE_PROVIDERS=true` plus a host allowlist.
 
 ---
 
@@ -171,6 +177,41 @@ Copy `.env.example` → `.env` and edit:
 | `POSTGRES_PASSWORD` | _(required, no default)_ | Same as above — don't reuse the image's old `swb` default |
 | `MINIO_ROOT_USER` | _(required, no default)_ | `docker-compose.prod.yml` `minio` service — only used with `--profile s3` / `make prod-full`, but must be set for any `make prod` run |
 | `MINIO_ROOT_PASSWORD` | _(required, no default)_ | Same as above — don't reuse the image's old `minioadmin` default; MinIO requires 8+ chars |
+| `SWB_AI_PROVIDERS` | _(unset → local Ollama only)_ | Inline JSON array configuring the AI provider registry — see [AI providers](#ai-providers) |
+| `SWB_AI_PROVIDERS_FILE` | _(unset)_ | Path to a JSON file with the same shape as `SWB_AI_PROVIDERS`; takes precedence if both are set |
+| `SWB_ALLOW_REMOTE_PROVIDERS` | `false` | Must be `true` for any non-local (`"local": false`) provider to be callable at all |
+| `SWB_REMOTE_PROVIDER_ALLOWLIST` | _(empty)_ | Comma-separated hostnames a remote provider's `base_url` may point at (SSRF guard) |
+
+---
+
+## AI providers
+
+The AI triage step (`POST /api/v1/runs/{id}/analyze`) talks to a provider registry, not a
+hardcoded API. Out of the box — no configuration at all — the only registered provider is a local,
+OpenAI-compatible endpoint (`ollama`, `http://localhost:11434/v1`); no analysis request can leave
+the machine.
+
+Any OpenAI-compatible server works the same way, local or remote: describe it as a registry entry.
+
+```bash
+export SWB_AI_PROVIDERS='[
+  {"name": "vllm-local", "base_url": "http://localhost:8000/v1", "local": true},
+  {"name": "deepseek",   "base_url": "https://api.deepseek.com",  "local": false, "default_model": "deepseek-chat"}
+]'
+```
+
+`local: false` entries (cloud/remote) are registered but **refused with an explicit error** unless
+you opt in with both of the following — the flag alone is not enough, since `base_url` is
+attacker-influenceable configuration and a bare flag would turn any configured remote entry into an
+SSRF channel (see `inspection/03-security.md` §2, §5):
+
+```bash
+export SWB_ALLOW_REMOTE_PROVIDERS=true
+export SWB_REMOTE_PROVIDER_ALLOWLIST=api.deepseek.com   # comma-separated hostnames
+```
+
+A remote provider that isn't allowed this way is neither callable nor listed as "available" in
+error messages — it behaves as if it weren't configured, not as a silent no-op.
 
 ---
 
@@ -235,13 +276,13 @@ sarif-workbench/
 
 - [x] SARIF ingestion (any SARIF 2.1.0 tool)
 - [x] Findings browser (filter, search, sort, drawer)
-- [x] AI triage via SSE (DeepSeek)
+- [x] AI triage via SSE, OpenAI-compatible provider registry (local default, cloud opt-in)
 - [x] PDF export (WeasyPrint, Svacer-compatible layout)
 - [x] Verdict reset
 - [ ] tree-sitter fingerprints (stable `swb_id` across runs)
 - [x] Manual verdict override UI (`PATCH /findings/{fid}/verdict`)
 - [ ] Run comparison / baseline delta view
-- [ ] GigaChat / YandexGPT / vLLM / Ollama providers
+- [ ] Server-managed API keys + `GET /api/v1/providers` for the web UI (no more localStorage key)
 - [ ] Authentication
 
 ---
