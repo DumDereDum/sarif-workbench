@@ -214,6 +214,25 @@ export SWB_REMOTE_PROVIDER_ALLOWLIST=api.deepseek.com   # comma-separated hostna
 A remote provider that isn't allowed this way is neither callable nor listed as "available" in
 error messages — it behaves as if it weren't configured, not as a silent no-op.
 
+**API keys live on the server only (T-44).** The client never holds or sends one — no
+`api_key` field anywhere in the web UI, no localStorage. A remote entry names an
+`api_key_env`: the environment variable the real secret is read from at call time, never
+the registry JSON itself:
+
+```bash
+export SWB_AI_PROVIDERS='[
+  {"name": "deepseek", "base_url": "https://api.deepseek.com", "local": false,
+   "default_model": "deepseek-chat", "api_key_env": "SWB_DEEPSEEK_API_KEY"}
+]'
+export SWB_DEEPSEEK_API_KEY=sk-...
+```
+
+Local providers need no key at all (most local inference servers don't check
+`Authorization`). The web UI reads its provider/model choices from `GET /api/v1/providers`
+(name/local/default_model for whatever's currently visible, plus a default) instead of a
+hardcoded list — the same source of truth this section describes, so the UI can never name
+a provider that isn't actually in the registry.
+
 ---
 
 ## Development without Docker
@@ -283,7 +302,7 @@ sarif-workbench/
 - [ ] tree-sitter fingerprints (stable `swb_id` across runs)
 - [x] Manual verdict override UI (`PATCH /findings/{fid}/verdict`)
 - [ ] Run comparison / baseline delta view
-- [ ] Server-managed API keys + `GET /api/v1/providers` for the web UI (no more localStorage key)
+- [x] Server-managed API keys + `GET /api/v1/providers` for the web UI (no more localStorage key)
 - [ ] Authentication
 
 ---

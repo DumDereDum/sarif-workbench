@@ -260,13 +260,6 @@ tbody tr:hover { background: var(--surface-2); }
   outline: none; transition: border-color .15s;
 }
 .form-input:focus { border-color: var(--primary); }
-.input-reveal { position: relative; display: flex; align-items: center; }
-.input-reveal .form-input { flex: 1; padding-right: 38px; }
-.reveal-btn {
-  position: absolute; right: 10px; display: flex; align-items: center; justify-content: center;
-  color: var(--muted); padding: 2px; border-radius: 4px;
-}
-.reveal-btn:hover { color: var(--ink); }
 .form-textarea {
   border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
   font-size: 12.5px; font-family: var(--mono); background: var(--surface-2); color: var(--ink);

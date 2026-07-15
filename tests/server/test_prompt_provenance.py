@@ -30,7 +30,7 @@ def _sse_events(text: str) -> list[dict]:
 
 
 def _analyze(client, run_id: str, **overrides) -> list[dict]:
-    payload = {"api_key": "test-key-not-used", "only_unmarked": False, **overrides}
+    payload = {"only_unmarked": False, **overrides}
     resp = client.post(f"/api/v1/runs/{run_id}/analyze", json=payload)
     assert resp.status_code == 200, resp.text
     return _sse_events(resp.text)
@@ -40,7 +40,7 @@ def _analyze(client, run_id: str, **overrides) -> list[dict]:
 def mock_llm_honest(monkeypatch):
     """Мок LLM в формате парсера honest: всегда false_positive."""
 
-    async def _fake_call_llm(provider, api_key, model, system, user):
+    async def _fake_call_llm(provider, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: замокано (honest)", "tokens": 5}
 
     monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
@@ -50,7 +50,7 @@ def mock_llm_honest(monkeypatch):
 def mock_llm_force_fp(monkeypatch):
     """Мок LLM в формате парсера force_fp (см. ai/prompts.py::_parse_force_fp)."""
 
-    async def _fake_call_llm(provider, api_key, model, system, user):
+    async def _fake_call_llm(provider, model, system, user):
         return {
             "content": (
                 "Marker: False Positive\n"
@@ -122,10 +122,10 @@ def test_honest_and_force_fp_false_positive_distinguishable_via_api(client, db_s
     и тот же атрибут).
     """
 
-    async def _fake_honest(provider, api_key, model, system, user):
+    async def _fake_honest(provider, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: замокано (honest)", "tokens": 5}
 
-    async def _fake_force_fp(provider, api_key, model, system, user):
+    async def _fake_force_fp(provider, model, system, user):
         return {
             "content": (
                 "Marker: False Positive\nSeverity: Minor\nПравило: CWE-89\n"

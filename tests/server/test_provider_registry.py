@@ -123,15 +123,37 @@ def test_call_llm_hits_configured_base_url_local_provider(monkeypatch):
         json.dumps([{"name": "local-llm", "base_url": "http://localhost:11434/v1", "local": True}]),
     )
 
-    result = asyncio.run(providers.call_llm("local-llm", "unused-key", "llama3", "sys", "user"))
+    result = asyncio.run(providers.call_llm("local-llm", "llama3", "sys", "user"))
 
     assert captured["url"] == "http://localhost:11434/v1/chat/completions"
     assert result == {"content": "Verdict: uncertain\nRationale: r", "tokens": 15}
 
 
+def test_call_llm_local_provider_sends_empty_key_without_api_key_env(monkeypatch):
+    """T-44: local providers need no `api_key_env` at all — `_resolve_api_key`
+    returns "" for them unconditionally, no server config required."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json=_ok_response())
+
+    _install_mock_transport(monkeypatch, handler)
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "local-llm", "base_url": "http://localhost:11434/v1", "local": True}]),
+    )
+
+    asyncio.run(providers.call_llm("local-llm", "llama3", "sys", "user"))
+
+    assert captured["auth"] == "Bearer "
+
+
 def test_call_llm_hits_configured_base_url_remote_deepseek_when_allowed(monkeypatch):
     """T-42: remote provider is reachable once BOTH the flag and the
-    allowlist explicitly permit it — not just because it's in the registry."""
+    allowlist explicitly permit it — not just because it's in the registry.
+    T-44: the key is never passed by the caller — it's resolved server-side
+    from the env var named by the registry entry's `api_key_env`."""
     captured: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -143,17 +165,128 @@ def test_call_llm_hits_configured_base_url_remote_deepseek_when_allowed(monkeypa
     monkeypatch.setenv(
         "SWB_AI_PROVIDERS",
         json.dumps(
-            [{"name": "deepseek", "base_url": "https://api.deepseek.com", "local": False, "default_model": "deepseek-chat"}]
+            [
+                {
+                    "name": "deepseek",
+                    "base_url": "https://api.deepseek.com",
+                    "local": False,
+                    "default_model": "deepseek-chat",
+                    "api_key_env": "SWB_TEST_DEEPSEEK_KEY",
+                }
+            ]
         ),
     )
     monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
     monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.deepseek.com")
+    monkeypatch.setenv("SWB_TEST_DEEPSEEK_KEY", "sk-test")
 
-    result = asyncio.run(providers.call_llm("deepseek", "sk-test", "deepseek-chat", "sys", "user"))
+    result = asyncio.run(providers.call_llm("deepseek", "deepseek-chat", "sys", "user"))
 
     assert captured["url"] == "https://api.deepseek.com/chat/completions"
     assert captured["auth"] == "Bearer sk-test"
     assert result == {"content": "Verdict: true_positive\nRationale: ok", "tokens": 15}
+
+
+# ── T-44: server-resolved API keys — never supplied by the caller ─────────
+
+
+def test_call_llm_remote_provider_without_api_key_env_raises_before_network_call(monkeypatch):
+    """Remote provider registered without `api_key_env` at all — a clear
+    config error, not a request sent with an empty/missing key."""
+    called = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["count"] += 1
+        return httpx.Response(200, json=_ok_response())
+
+    _install_mock_transport(monkeypatch, handler)
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "cloud-x", "base_url": "https://api.example.com", "local": False}]),
+    )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.example.com")
+
+    with pytest.raises(RuntimeError, match="api_key_env"):
+        asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
+
+    assert called["count"] == 0
+
+
+def test_call_llm_remote_provider_api_key_env_unset_raises_before_network_call(monkeypatch):
+    """`api_key_env` is configured but the named env var is not set on the
+    server — clear error naming the env var, not the value; no request sent."""
+    called = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["count"] += 1
+        return httpx.Response(200, json=_ok_response())
+
+    _install_mock_transport(monkeypatch, handler)
+    monkeypatch.delenv("SWB_TEST_MISSING_KEY", raising=False)
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps(
+            [
+                {
+                    "name": "cloud-x",
+                    "base_url": "https://api.example.com",
+                    "local": False,
+                    "api_key_env": "SWB_TEST_MISSING_KEY",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.example.com")
+
+    with pytest.raises(RuntimeError, match="SWB_TEST_MISSING_KEY"):
+        asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
+
+    assert called["count"] == 0
+
+
+def test_call_llm_remote_provider_api_key_env_empty_string_raises(monkeypatch):
+    """The named env var IS set, but to an empty/whitespace string — also
+    rejected, not silently sent as an empty Bearer token."""
+    _install_mock_transport(monkeypatch, lambda request: httpx.Response(200, json=_ok_response()))
+    monkeypatch.setenv("SWB_TEST_BLANK_KEY", "   ")
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps(
+            [
+                {
+                    "name": "cloud-x",
+                    "base_url": "https://api.example.com",
+                    "local": False,
+                    "api_key_env": "SWB_TEST_BLANK_KEY",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.example.com")
+
+    with pytest.raises(RuntimeError, match="SWB_TEST_BLANK_KEY"):
+        asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
+
+
+def test_call_llm_error_messages_never_contain_actual_key_value(monkeypatch):
+    """The two config-error messages above name the env var, never a value —
+    there IS no value to leak here (unset/empty), but guard the invariant
+    explicitly so a future refactor can't start interpolating os.environ
+    wholesale into the message."""
+    monkeypatch.setenv(
+        "SWB_AI_PROVIDERS",
+        json.dumps([{"name": "cloud-x", "base_url": "https://api.example.com", "local": False}]),
+    )
+    monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
+    monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.example.com")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
+
+    assert "api_key_env" in str(excinfo.value)
 
 
 def test_call_llm_parses_identically_across_two_configured_providers(monkeypatch):
@@ -174,15 +307,21 @@ def test_call_llm_parses_identically_across_two_configured_providers(monkeypatch
         json.dumps(
             [
                 {"name": "vllm-local", "base_url": "http://localhost:8000/v1", "local": True},
-                {"name": "cloud-x", "base_url": "https://api.example.com", "local": False},
+                {
+                    "name": "cloud-x",
+                    "base_url": "https://api.example.com",
+                    "local": False,
+                    "api_key_env": "SWB_TEST_CLOUD_X_KEY",
+                },
             ]
         ),
     )
     monkeypatch.setenv("SWB_ALLOW_REMOTE_PROVIDERS", "true")
     monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "api.example.com")
+    monkeypatch.setenv("SWB_TEST_CLOUD_X_KEY", "k")
 
-    r1 = asyncio.run(providers.call_llm("vllm-local", "k", "m", "s", "u"))
-    r2 = asyncio.run(providers.call_llm("cloud-x", "k", "m", "s", "u"))
+    r1 = asyncio.run(providers.call_llm("vllm-local", "m", "s", "u"))
+    r2 = asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
 
     expected = {"content": "Verdict: false_positive\nRationale: same-code", "tokens": 15}
     assert r1 == expected
@@ -213,7 +352,7 @@ def test_remote_provider_blocked_by_default_no_network_call(monkeypatch):
     # SWB_ALLOW_REMOTE_PROVIDERS not set — default false (see _clean_provider_env).
 
     with pytest.raises(PermissionError, match="cloud-x"):
-        asyncio.run(providers.call_llm("cloud-x", "k", "m", "s", "u"))
+        asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
 
     assert called["count"] == 0, "remote call must not reach the network when disabled"
 
@@ -235,7 +374,7 @@ def test_remote_provider_blocked_when_flag_on_but_host_not_allowlisted(monkeypat
     monkeypatch.setenv("SWB_REMOTE_PROVIDER_ALLOWLIST", "some-other-host.example")
 
     with pytest.raises(PermissionError, match="allowlist"):
-        asyncio.run(providers.call_llm("cloud-x", "k", "m", "s", "u"))
+        asyncio.run(providers.call_llm("cloud-x", "m", "s", "u"))
 
     assert called["count"] == 0
 

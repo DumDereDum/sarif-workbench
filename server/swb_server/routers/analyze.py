@@ -4,24 +4,32 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-
-logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..ai.analyze_loop import load_findings_for_analysis, max_consecutive_errors, run_analysis
 from ..ai.prompts import PROMPTS
+from ..ai.providers import load_registry, visible_providers
 from ..db import SessionLocal, get_db
 from ..models import Run
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
 
 
 class AnalyzeRequest(BaseModel):
-    provider: str = "deepseek"
-    api_key: str
-    model: str = "deepseek-chat"
+    # T-44: no api_key field — the client never holds or sends one, the
+    # server resolves it from the chosen provider's own config
+    # (ai/providers.py::_resolve_api_key). provider/model default to `None`
+    # rather than a hardcoded literal (the old "deepseek"/"deepseek-chat"
+    # defaults drifted out of sync with the registry after T-42) — an
+    # unset value resolves to the live registry's default at request time,
+    # see `_resolve_provider_and_model` below, so there is nothing here that
+    # can go stale if the registry changes.
+    provider: str | None = None
+    model: str | None = None
     prompt_id: str = "honest"          # honest | force_fp | custom
     custom_system: str | None = None   # used when prompt_id == "custom"
     only_unmarked: bool = True
@@ -31,6 +39,59 @@ class AnalyzeRequest(BaseModel):
 @router.get("/prompts")
 def list_prompts():
     return {"prompts": list(PROMPTS.values())}
+
+
+@router.get("/providers")
+def list_providers():
+    """T-44: single source of truth for the web UI's provider/model choices —
+    replaces the hardcoded `PROVIDERS` list that used to live in
+    AnalyzeModal.tsx and could name a provider not actually in the registry.
+    Only providers currently usable (T-42 gates applied — a disabled remote
+    provider is omitted, same rule `get_provider()` enforces) are listed.
+    """
+    configs = visible_providers()
+    return {
+        "providers": [
+            {"name": c.name, "local": c.local, "default_model": c.default_model}
+            for c in configs
+        ],
+        "default_provider": configs[0].name if configs else None,
+    }
+
+
+def _resolve_provider_and_model(req: AnalyzeRequest) -> tuple[str, str]:
+    """T-44: fill in an unset provider/model from the live registry default
+    rather than a literal hardcoded here — see AnalyzeRequest docstring.
+
+    An explicitly named provider is passed through untouched, even if it
+    turns out to be unknown or currently blocked (T-42) — that already has
+    a specific, well-tested error path (`get_provider()`'s `ValueError`/
+    `PermissionError`, surfaced per-finding by `run_analysis`). The 422
+    below is only for the "nothing to fall back to at all" case, when the
+    caller didn't name a provider and there isn't a usable default either —
+    it must not mask a more specific error for a provider the caller did
+    name explicitly.
+    """
+    if req.provider:
+        model_name = req.model
+        if not model_name:
+            cfg = load_registry().get(req.provider)
+            model_name = (cfg.default_model if cfg else None) or ""
+        return req.provider, model_name
+
+    visible = visible_providers()
+    if not visible:
+        raise HTTPException(
+            422,
+            {
+                "error": "no_provider",
+                "message": "Нет доступного AI-провайдера: настройте SWB_AI_PROVIDERS "
+                "или разрешите удалённый провайдер (SWB_ALLOW_REMOTE_PROVIDERS)",
+            },
+        )
+    default_cfg = visible[0]
+    model_name = req.model or default_cfg.default_model or ""
+    return default_cfg.name, model_name
 
 
 @router.post("/runs/{run_id}/analyze")
@@ -49,6 +110,8 @@ async def analyze_run(
     run = db.query(Run).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
+
+    provider_name, model_name = _resolve_provider_and_model(req)
 
     if req.prompt_id == "custom":
         if not req.custom_system:
@@ -73,7 +136,7 @@ async def analyze_run(
             logger.info(
                 "[analyze] START run_id=%s  provider=%s  model=%s  prompt=%s  only_unmarked=%s  "
                 "override=%s  findings=%d  skipped_human=%d",
-                run_id, req.provider, req.model, req.prompt_id, req.only_unmarked, req.override,
+                run_id, provider_name, model_name, req.prompt_id, req.only_unmarked, req.override,
                 len(findings), skipped_human,
             )
 
@@ -81,9 +144,8 @@ async def analyze_run(
                 session,
                 run_id,
                 findings,
-                provider=req.provider,
-                api_key=req.api_key,
-                model=req.model,
+                provider=provider_name,
+                model=model_name,
                 system_prompt=system_prompt,
                 prompt_id=req.prompt_id,
                 prompt_version=prompt_version,

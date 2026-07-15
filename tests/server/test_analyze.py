@@ -27,7 +27,7 @@ def _sse_events(text: str) -> list[dict]:
 
 
 def _analyze(client, run_id: str, **overrides) -> list[dict]:
-    payload = {"api_key": "test-key-not-used", "only_unmarked": False, **overrides}
+    payload = {"only_unmarked": False, **overrides}
     resp = client.post(f"/api/v1/runs/{run_id}/analyze", json=payload)
     assert resp.status_code == 200, resp.text
     return _sse_events(resp.text)
@@ -44,7 +44,7 @@ def _by_type(events: list[dict]) -> dict[str, list[dict]]:
 def mock_llm(monkeypatch):
     """Мок LLM: всегда false_positive, формат под parse_response промпта honest."""
 
-    async def _fake_call_llm(provider, api_key, model, system, user):
+    async def _fake_call_llm(provider, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: замокано", "tokens": 5}
 
     monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)

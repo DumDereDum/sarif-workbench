@@ -48,6 +48,19 @@ A remote provider that fails either check is not just refused when called —
 it is also excluded from the "available providers" list surfaced in error
 messages, so a disabled remote provider is neither visible nor callable.
 Local providers (`local=True`) are never subject to these two checks.
+
+T-44 — the API key lives on the server, not the client. A client no longer
+sends `api_key` at all (see `routers/analyze.py::AnalyzeRequest` and
+`GET /api/v1/providers`, the single source of truth the web UI reads
+provider/model choices from instead of a hardcoded list). A `ProviderConfig`
+instead carries `api_key_env`: the *name* of an environment variable the
+real secret is read from at call time, resolved by `_resolve_api_key()`
+inside `call_llm()` — never persisted in the registry JSON itself (that
+config can end up in git/logs/config dumps, a raw key should not). Local
+providers need no key at all (most local inference servers ignore
+`Authorization`); a remote provider with a missing/empty configured env var
+fails with a clear, actionable error instead of an opaque 401 from the
+provider — the error names the *env var*, never a key value.
 """
 
 from __future__ import annotations
@@ -79,12 +92,18 @@ class ProviderConfig:
     only reachable when `SWB_ALLOW_REMOTE_PROVIDERS` is on AND their
     `base_url` host is in `SWB_REMOTE_PROVIDER_ALLOWLIST`, checked in
     `get_provider()`. Local providers bypass both checks.
+
+    `api_key_env` (T-44): name of the server-side environment variable
+    holding the real API key — never the key itself. `None`/unset is fine
+    for local providers (no auth needed); a remote provider without it, or
+    whose named env var is empty/unset, fails clearly in `_resolve_api_key`.
     """
 
     name: str
     base_url: str
     local: bool = False
     default_model: str | None = None
+    api_key_env: str | None = None
 
 
 _DEFAULT_REGISTRY: dict[str, ProviderConfig] = {
@@ -111,6 +130,7 @@ def _parse_registry(raw: str, *, source: str) -> dict[str, ProviderConfig]:
                 base_url=entry["base_url"],
                 local=bool(entry.get("local", False)),
                 default_model=entry.get("default_model"),
+                api_key_env=entry.get("api_key_env"),
             )
         except KeyError as exc:
             raise ValueError(f"{source}: provider entry missing required field {exc}") from exc
@@ -186,6 +206,16 @@ def _visible_names(registry: dict[str, ProviderConfig]) -> list[str]:
     return sorted(name for name, cfg in registry.items() if _is_usable(cfg))
 
 
+def visible_providers() -> list[ProviderConfig]:
+    """T-44: the configs behind `_visible_names`, for callers that need more
+    than just the name — namely `GET /api/v1/providers` (the UI's single
+    source of truth for provider/model choices, replacing the old hardcoded
+    `PROVIDERS` list in AnalyzeModal.tsx) and the server-side default-provider
+    resolution in `routers/analyze.py` when a request doesn't name one."""
+    registry = load_registry()
+    return [registry[name] for name in _visible_names(registry)]
+
+
 def get_provider(name: str) -> ProviderConfig:
     """Resolve a provider by name, enforcing the T-42 remote gate.
 
@@ -210,9 +240,45 @@ def get_provider(name: str) -> ProviderConfig:
     return config
 
 
-async def call_llm(provider: str, api_key: str, model: str, system: str, user: str) -> dict[str, Any]:
-    """Dispatch to the configured provider. Returns {"content": str, "tokens": int}."""
+def _resolve_api_key(config: ProviderConfig) -> str:
+    """T-44: the actual secret, resolved at call time — never stored in the
+    registry itself (env/file config can end up in git/logs/config dumps).
+
+    Local providers (`local=True`) need no key at all: most local inference
+    servers don't check `Authorization`, so this returns "" unconditionally
+    rather than requiring `api_key_env` to be configured for them.
+
+    Remote providers must have `api_key_env` set to the name of a non-empty
+    server environment variable; either condition failing raises a clear,
+    actionable `RuntimeError` naming the *env var* (never a key value) —
+    the alternative (sending an empty/missing key to the provider) would
+    surface only as an opaque 401 from the far end.
+    """
+    if config.local:
+        return ""
+    if not config.api_key_env:
+        raise RuntimeError(
+            f"Provider {config.name!r} is remote but has no api_key_env configured — "
+            f"set \"api_key_env\" on its registry entry (SWB_AI_PROVIDERS/SWB_AI_PROVIDERS_FILE)"
+        )
+    key = os.environ.get(config.api_key_env, "").strip()
+    if not key:
+        raise RuntimeError(
+            f"Provider {config.name!r} requires an API key: environment variable "
+            f"{config.api_key_env} is not set (or empty) on the server"
+        )
+    return key
+
+
+async def call_llm(provider: str, model: str, system: str, user: str) -> dict[str, Any]:
+    """Dispatch to the configured provider. Returns {"content": str, "tokens": int}.
+
+    T-44: no longer takes `api_key` — the caller (the client, ultimately)
+    never holds or transmits it. The key is resolved here, from the
+    provider's own server-side config, right before the HTTP call.
+    """
     config = get_provider(provider)
+    api_key = _resolve_api_key(config)
     logger.debug(
         "[providers] dispatching  provider=%s  base_url=%s  model=%s  local=%s",
         provider, config.base_url, model, config.local,

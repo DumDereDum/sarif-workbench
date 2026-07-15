@@ -221,14 +221,14 @@ def test_ai_write_between_human_reads_and_patch_causes_conflict(client, upload_r
     human_read_version = detail["verdict"]["version"]
     assert human_read_version == 1
 
-    async def _fake_call_llm(provider, api_key, model, system, user):
+    async def _fake_call_llm(provider, model, system, user):
         return {"content": "Verdict: false_positive\nRationale: ai-first", "tokens": 1}
 
     monkeypatch.setattr("swb_server.ai.analyze_loop.call_llm", _fake_call_llm)
 
     analyze_resp = client.post(
         f"/api/v1/runs/{run['run_id']}/analyze",
-        json={"api_key": "test-key-not-used", "only_unmarked": False},
+        json={"only_unmarked": False},
     )
     assert analyze_resp.status_code == 200
     events = [

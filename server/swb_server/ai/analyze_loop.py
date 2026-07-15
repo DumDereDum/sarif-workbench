@@ -88,7 +88,6 @@ async def run_analysis(
     findings: list[Finding],
     *,
     provider: str,
-    api_key: str,
     model: str,
     system_prompt: str,
     prompt_id: str,
@@ -149,7 +148,6 @@ async def run_analysis(
 
             result = await call_llm(
                 provider=provider,
-                api_key=api_key,
                 model=model,
                 system=system_prompt,
                 user=user_msg,

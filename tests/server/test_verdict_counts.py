@@ -100,7 +100,7 @@ def mock_llm_cycle(monkeypatch):
     verdicts = ["true_positive", "false_positive", "uncertain"]
     state = {"n": 0}
 
-    async def _fake_call_llm(provider, api_key, model, system, user):
+    async def _fake_call_llm(provider, model, system, user):
         v = verdicts[state["n"] % len(verdicts)]
         state["n"] += 1
         return {"content": f"Verdict: {v}\nRationale: mock-{v}", "tokens": 1}
@@ -152,7 +152,7 @@ def test_reset_and_analyze_counts_match_independently_computed_truth(
     # analyze по всем находкам (мок даёт неоднородный микс вердиктов)
     resp = client.post(
         f"/api/v1/runs/{run['run_id']}/analyze",
-        json={"api_key": "test-key-not-used", "only_unmarked": False},
+        json={"only_unmarked": False},
     )
     assert resp.status_code == 200, resp.text
 
@@ -193,7 +193,7 @@ def test_analyze_toctou_recheck_protects_finding_patched_mid_batch(client, db_se
     assert len(items) == 3
     target = next(i for i in items if i["uri"] == "src/race-target.py")
 
-    async def _fake_call_llm(provider, api_key, model, system, user):
+    async def _fake_call_llm(provider, model, system, user):
         if "src/race-target.py" in user:
             # "Конкурентный" human PATCH, случившийся, пока эта находка висит
             # на сетевом вызове к LLM — отдельная сессия, как у реального
@@ -214,7 +214,7 @@ def test_analyze_toctou_recheck_protects_finding_patched_mid_batch(client, db_se
 
     resp = client.post(
         f"/api/v1/runs/{run['run_id']}/analyze",
-        json={"api_key": "test-key-not-used", "only_unmarked": False},
+        json={"only_unmarked": False},
     )
     assert resp.status_code == 200, resp.text
     events = _sse_events(resp.text)

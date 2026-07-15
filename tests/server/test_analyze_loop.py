@@ -54,7 +54,6 @@ def _make_run(upload_run, n: int):
 def _run_kwargs(**overrides):
     base = dict(
         provider="deepseek",
-        api_key="bad-key",
         model="deepseek-chat",
         system_prompt="sys",
         prompt_id="honest",

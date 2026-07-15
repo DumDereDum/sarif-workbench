@@ -199,7 +199,6 @@ def test_analyze_loop_never_logs_raw_response_or_rationale(db_session, upload_ru
             analyze_loop.run_analysis(
                 db_session, run["run_id"], findings,
                 provider="deepseek",
-                api_key=KEY_MARKER,
                 model="deepseek-chat",
                 system_prompt=f"sys prompt with {CODE_MARKER}",
                 prompt_id="honest",
@@ -239,9 +238,15 @@ def test_analyze_loop_error_path_never_leaks_raw_provider_error_body(
 
     _install_mock_transport(monkeypatch, handler)
 
-    async def _real_call_llm(*, provider, api_key, model, system, user):
+    # T-44: analyze_loop.call_llm no longer receives api_key (it's resolved
+    # server-side inside providers.call_llm from the provider's own config,
+    # not passed down from the caller) — the stand-in below hardcodes the
+    # marker key itself, standing in for whatever `_resolve_api_key` would
+    # have produced, so this test still exercises "a real secret flowing
+    # through call_openai_compatible must never leak into logs/SSE".
+    async def _real_call_llm(*, provider, model, system, user):
         return await openai_compatible.call_openai_compatible(
-            "https://api.example.com", api_key, model, system, user, provider_name=provider,
+            "https://api.example.com", KEY_MARKER, model, system, user, provider_name=provider,
         )
 
     monkeypatch.setattr(analyze_loop, "call_llm", _real_call_llm)
@@ -251,7 +256,6 @@ def test_analyze_loop_error_path_never_leaks_raw_provider_error_body(
             analyze_loop.run_analysis(
                 db_session, run["run_id"], findings,
                 provider="deepseek",
-                api_key=KEY_MARKER,
                 model="deepseek-chat",
                 system_prompt="sys",
                 prompt_id="honest",

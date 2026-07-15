@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
-const STORAGE_KEY = 'swb_ai_settings'
-
-interface AISettings {
-  provider: string
-  api_key: string
-  model: string
+// T-44: provider/model/key no longer live on the client (no localStorage,
+// no api_key field anywhere) — GET /api/v1/providers is the single source
+// of truth for what's actually configured and callable on the server
+// (T-42 gates already applied there: a disabled remote provider is simply
+// absent from this list, not just refused when called).
+interface ProviderInfo {
+  name: string
+  local: boolean
+  default_model: string | null
 }
 
 interface AnalyzeModalProps {
@@ -35,26 +38,10 @@ interface Progress {
   stopMessage?: string
 }
 
-const PROVIDERS = [
-  { id: 'deepseek', label: 'DeepSeek', defaultModel: 'deepseek-v4-flash', placeholder: 'sk-...' },
-]
-
 const STANDARD_PROMPTS = [
   { id: 'honest',   label: 'Честный анализ',       desc: 'ИИ выносит настоящий вердикт: TP / FP / Uncertain' },
   { id: 'force_fp', label: 'Все — False Positive',  desc: 'Принудительно размечает все находки как FP с формальным комментарием' },
 ]
-
-function loadSettings(): AISettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { provider: 'deepseek', api_key: '', model: 'deepseek-v4-flash' }
-}
-
-function saveSettings(s: AISettings) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
-}
 
 function ErrorLog({ entries, defaultOpen = false }: { entries: ErrorEntry[]; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -90,12 +77,14 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
   const abortRef = useRef<AbortController | null>(null)
 
   const [step, setStep]               = useState<Step>('config')
-  const [settings, setSettings]       = useState<AISettings>(loadSettings)
+  const [providers, setProviders]     = useState<ProviderInfo[]>([])
+  const [providersLoaded, setProvidersLoaded] = useState(false)
+  const [selProvider, setSelProvider] = useState('')
+  const [model, setModel]             = useState('')
   const [promptId, setPromptId]       = useState('honest')
   const [customSystem, setCustom]     = useState('')
   const [progress, setProgress]       = useState<Progress>({ done: 0, total: 0, tokens: 0, errors: 0, errorLog: [] })
   const [errMsg, setErrMsg]           = useState('')
-  const [showKey, setShowKey]         = useState(false)
   const [promptTexts, setPromptTexts] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -109,16 +98,29 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
       .catch(() => {})
   }, [])
 
-  const provider = PROVIDERS.find(p => p.id === settings.provider) ?? PROVIDERS[0]
+  // T-44: провайдеры/модели/дефолт приходят с сервера, а не хардкодятся —
+  // единый источник, из которого убран рассинхрон "deepseek" в UI vs
+  // реального реестра на сервере (см. Why задачи T-44).
+  useEffect(() => {
+    fetch('/api/v1/providers')
+      .then(r => r.json())
+      .then((data: { providers: ProviderInfo[]; default_provider: string | null }) => {
+        setProviders(data.providers)
+        const def = data.default_provider ?? data.providers[0]?.name ?? ''
+        setSelProvider(def)
+        setModel(data.providers.find(p => p.name === def)?.default_model ?? '')
+      })
+      .catch(() => {})
+      .finally(() => setProvidersLoaded(true))
+  }, [])
 
-  function updateSettings(patch: Partial<AISettings>) {
-    const next = { ...settings, ...patch }
-    setSettings(next)
-    saveSettings(next)
+  function selectProvider(name: string) {
+    setSelProvider(name)
+    setModel(providers.find(p => p.name === name)?.default_model ?? '')
   }
 
   async function startAnalysis() {
-    if (!settings.api_key.trim()) { setErrMsg('Введите API-ключ'); return }
+    if (!selProvider) { setErrMsg('Нет доступного AI-провайдера'); return }
     if (promptId === 'custom' && !customSystem.trim()) { setErrMsg('Введите системный промпт'); return }
 
     setErrMsg('')
@@ -134,9 +136,8 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
         signal: abort.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: settings.provider,
-          api_key: settings.api_key,
-          model: settings.model,
+          provider: selProvider,
+          model,
           prompt_id: promptId,
           custom_system: promptId === 'custom' ? customSystem : undefined,
           only_unmarked: true,
@@ -268,38 +269,34 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
           <div className="modal-body">
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">DeepSeek API-ключ</label>
-                <div className="input-reveal">
-                  <input
-                    type={showKey ? 'text' : 'password'}
+                <label className="form-label">Провайдер</label>
+                {providersLoaded && providers.length === 0 ? (
+                  <div className="form-error">
+                    Нет доступного AI-провайдера — настройте SWB_AI_PROVIDERS или разрешите
+                    удалённый провайдер (SWB_ALLOW_REMOTE_PROVIDERS)
+                  </div>
+                ) : (
+                  <select
                     className="form-input"
-                    placeholder={provider.placeholder}
-                    value={settings.api_key}
-                    onChange={e => updateSettings({ api_key: e.target.value })}
+                    value={selProvider}
+                    onChange={e => selectProvider(e.target.value)}
                     autoFocus
-                  />
-                  <button className="reveal-btn" type="button" onClick={() => setShowKey(v => !v)} title={showKey ? 'Скрыть' : 'Показать'}>
-                    {showKey ? (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                        <line x1="1" y1="1" x2="23" y2="23"/>
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
+                  >
+                    {providers.map(p => (
+                      <option key={p.name} value={p.name}>
+                        {p.name}{p.local ? ' (локальный)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="form-group" style={{ maxWidth: 200 }}>
                 <label className="form-label">Модель</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={settings.model}
-                  onChange={e => updateSettings({ model: e.target.value })}
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
                 />
               </div>
             </div>

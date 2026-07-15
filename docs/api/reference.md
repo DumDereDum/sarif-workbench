@@ -178,12 +178,15 @@ Trigger AI triage for all unverdicted findings in a run.
 
 ```json
 {
-  "provider": "deepseek",
-  "api_key": "sk-...",
-  "model": "deepseek-chat",
+  "provider": "ollama",
+  "model": "llama3",
   "prompt_type": "honest"
 }
 ```
+
+`provider`/`model` are optional — omitted, they resolve to the server's configured default
+(see `GET /api/v1/providers`). There is no `api_key` field: keys are configured on the
+server, never sent by the client (T-44).
 
 **Response:** `text/event-stream` (SSE)
 
@@ -299,6 +302,33 @@ List available built-in prompt templates for AI triage.
   ]
 }
 ```
+
+---
+
+## Providers
+
+### `GET /api/v1/providers`
+
+List AI providers currently configured *and* usable (T-42 gates already applied — a
+disabled remote provider is simply absent, not just refused when called). The web UI reads
+its provider/model choices from here instead of a hardcoded list (T-44); there is no
+`api_key` anywhere in this response — keys are server-side config, never sent to or held by
+the client.
+
+```json
+{
+  "providers": [
+    { "name": "ollama", "local": true, "default_model": "llama3" }
+  ],
+  "default_provider": "ollama"
+}
+```
+
+`default_provider` is `null` when no provider is currently usable at all (e.g. a
+remote-only registry with remote providers still disabled). `POST .../analyze` returns
+422 `no_provider` only when the request *also* doesn't name a provider explicitly — an
+explicitly named provider is always passed through, even if it turns out unknown or
+blocked, so that error surfaces on its own terms instead of being masked here.
 
 ---
 
