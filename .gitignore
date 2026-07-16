@@ -228,8 +228,8 @@ roadmap/
 .DS_Store
 **/.DS_Store
 
-# Empty root npm artifact
-package-lock.json
+# Empty root npm artifact (not web/package-lock.json, which is committed)
+/package-lock.json
 
 # Runtime data (SQLite + local blobs)
 server/data/
