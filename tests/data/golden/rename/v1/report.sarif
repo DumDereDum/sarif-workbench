@@ -1,0 +1,32 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "GoldenScan",
+          "version": "1.0.0",
+          "rules": [
+            {"id": "CWE-22", "name": "PathTraversal"}
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-22",
+          "level": "warning",
+          "message": {"text": "Path built from unsanitized input"},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "src/a.py"},
+                "region": {"startLine": 5}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

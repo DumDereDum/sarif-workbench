@@ -1,0 +1,32 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "GoldenScan",
+          "version": "1.0.0",
+          "rules": [
+            {"id": "CWE-89", "name": "SqlInjection"}
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CWE-89",
+          "level": "error",
+          "message": {"text": "SQL built from unsanitized input"},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "src/auth.py"},
+                "region": {"startLine": 18}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
