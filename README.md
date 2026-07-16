@@ -62,7 +62,8 @@ uv sync && (cd web && npm install)
 uv run pytest tests/ -v       # pytest test suite (325+ tests)
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR workflow and our
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
