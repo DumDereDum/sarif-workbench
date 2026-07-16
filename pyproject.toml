@@ -1,8 +1,30 @@
+[project]
+name = "sarif-workbench"
+version = "0.1.0"
+license = "MIT"
+authors = [{ name = "SARIF Workbench Contributors" }]
+# Depend on the installable workspace members so a plain `uv sync` at the
+# repo root still installs everything (cli+server code and their runtime
+# deps), matching pre-[project] "virtual workspace" behavior — without this,
+# uv treats the root as the sync target and would install only its own
+# (empty) dependency set, leaving `uv run pytest`/`uv run mypy` unable to
+# import swb_cli/swb_server.
+dependencies = ["swb-cli", "swb-server"]
+
+# Workspace root only: no code of its own, not built or published — see
+# cli/pyproject.toml and server/pyproject.toml for the installable packages.
+[tool.uv]
+package = false
+
 [tool.uv.workspace]
 members = ["cli", "server", "contract"]
 
+[tool.uv.sources]
+swb-cli = { workspace = true }
+swb-server = { workspace = true }
+
 [dependency-groups]
-dev = ["ruff>=0.15", "mypy>=1.13"]
+dev = ["ruff>=0.15", "mypy>=1.13", "pytest>=8"]
 
 [tool.mypy]
 python_version = "3.11"

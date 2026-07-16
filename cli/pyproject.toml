@@ -2,6 +2,8 @@
 name = "swb-cli"
 version = "0.1.0"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "SARIF Workbench Contributors" }]
 dependencies = ["pydantic>=2", "swb-contract"]
 
 [project.scripts]
