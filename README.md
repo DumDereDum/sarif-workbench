@@ -55,6 +55,31 @@ in the [documentation](https://dumderdum.github.io/sarif-workbench/).
 
 ---
 
+## Security
+
+**No authentication, no perimeter of its own.** The server has no login, no user accounts, and CORS
+is wide open (`allow_origins=["*"]` in `server/swb_server/main.py`) — anyone who can reach the API
+can read, modify, and re-analyze every project. This is a deliberate gap, not an oversight — auth is
+planned as a future feature, not yet built. **Only run SARIF Workbench inside a
+trusted network or on localhost. Do not expose the server to the public internet or to
+untrusted users.**
+
+**What reaches an LLM.** AI triage sends each finding's rule id/name, severity, message, CWE (when
+present), file path, line number, function/scope name, and the code snippet itself (lines extracted
+from your repo by the CLI) to whichever AI provider is configured — see
+`server/swb_server/ai/prompts.py::build_user_message()` for the exact fields. By default that's a
+local endpoint (Ollama, same host/perimeter — nothing leaves it). Remote cloud providers (DeepSeek,
+GigaChat, YandexGPT, ...) share the same registry but are disabled unless you explicitly opt in via
+`SWB_ALLOW_REMOTE_PROVIDERS=true` plus a `SWB_REMOTE_PROVIDER_ALLOWLIST` host allowlist. API keys are
+read from server-side environment variables only — never sent to or stored in the browser — and
+prompts, code snippets, and keys are never written to logs, at any `LOG_LEVEL`.
+
+**Found a vulnerability?** Please open a GitHub Issue with the `security` label. For sensitive
+reports you'd rather not post publicly, reach out privately via the maintainer's GitHub profile
+([@DumDereDum](https://github.com/DumDereDum)) instead.
+
+---
+
 ## Development
 
 ```bash
