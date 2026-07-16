@@ -55,6 +55,7 @@ export default function RunView() {
   const [showAnalyze, setShowAnalyze]   = useState(false)
   const [resetState, setResetState]     = useState<'idle' | 'confirm' | 'loading'>('idle')
   const [pdfLoading, setPdfLoading]     = useState(false)
+  const [pdfError, setPdfError]         = useState<string | null>(null)
 
   const toggleSev = (s: string) => setSevFilter(prev => {
     const n = new Set(prev)
@@ -97,11 +98,13 @@ export default function RunView() {
 
   async function downloadReport() {
     setPdfLoading(true)
+    setPdfError(null)
     try {
       const resp = await fetch(`/api/v1/runs/${runId}/report`)
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
-        alert(err.message ?? `Ошибка ${resp.status}`)
+        console.error('Не удалось скачать PDF-отчёт:', resp.status, err)
+        setPdfError(err.message ?? `Не удалось сгенерировать отчёт (ошибка ${resp.status})`)
         return
       }
       const blob = await resp.blob()
@@ -111,6 +114,9 @@ export default function RunView() {
       a.download = `report-${runId}.pdf`
       a.click()
       URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Не удалось скачать PDF-отчёт:', e)
+      setPdfError('Не удалось скачать отчёт — проверьте соединение с сервером')
     } finally {
       setPdfLoading(false)
     }
@@ -237,6 +243,10 @@ export default function RunView() {
             </button>
           </div>
         </div>
+
+        {pdfError && (
+          <div className="form-error" style={{ marginBottom: 8 }}>{pdfError}</div>
+        )}
 
         <div className="rh-sub">
           {runData.tool && <span>Инструмент: <b>{runData.tool}{runData.tool_version ? ` ${runData.tool_version}` : ''}</b></span>}

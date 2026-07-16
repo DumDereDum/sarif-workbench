@@ -86,6 +86,7 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
   const [progress, setProgress]       = useState<Progress>({ done: 0, total: 0, tokens: 0, errors: 0, errorLog: [] })
   const [errMsg, setErrMsg]           = useState('')
   const [promptTexts, setPromptTexts] = useState<Record<string, string>>({})
+  const [providersLoadError, setProvidersLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/v1/prompts')
@@ -95,7 +96,7 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
         for (const p of data.prompts) map[p.id] = p.system
         setPromptTexts(map)
       })
-      .catch(() => {})
+      .catch(e => console.error('Не удалось загрузить тексты промптов:', e))
   }, [])
 
   // T-44: провайдеры/модели/дефолт приходят с сервера, а не хардкодятся —
@@ -110,7 +111,10 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
         setSelProvider(def)
         setModel(data.providers.find(p => p.name === def)?.default_model ?? '')
       })
-      .catch(() => {})
+      .catch(e => {
+        console.error('Не удалось загрузить список AI-провайдеров:', e)
+        setProvidersLoadError('Не удалось загрузить список провайдеров — проверьте, что сервер доступен')
+      })
       .finally(() => setProvidersLoaded(true))
   }, [])
 
@@ -209,7 +213,9 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
               qc.invalidateQueries({ queryKey: ['run', runId] })
               setStep('done')
             }
-          } catch {}
+          } catch (e) {
+            console.warn('Не удалось разобрать SSE-событие, строка пропущена:', line, e)
+          }
         }
       }
 
@@ -272,8 +278,10 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
                 <label className="form-label">Провайдер</label>
                 {providersLoaded && providers.length === 0 ? (
                   <div className="form-error">
-                    Нет доступного AI-провайдера — настройте SWB_AI_PROVIDERS или разрешите
-                    удалённый провайдер (SWB_ALLOW_REMOTE_PROVIDERS)
+                    {providersLoadError ?? (
+                      'Нет доступного AI-провайдера — настройте SWB_AI_PROVIDERS или разрешите ' +
+                      'удалённый провайдер (SWB_ALLOW_REMOTE_PROVIDERS)'
+                    )}
                   </div>
                 ) : (
                   <select
