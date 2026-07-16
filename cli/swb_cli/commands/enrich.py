@@ -68,8 +68,15 @@ def enrich(args) -> int:
 
     try:
         runs = parse_sarif(sarif_path)
-    except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        logger.error("Failed to parse SARIF: %s", exc)
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError, AttributeError) as exc:
+        # T-64: the raw exception text (e.g. "'str' object has no attribute
+        # 'get'" for a structurally wrong-typed field) is an internal
+        # implementation detail, not a message a user can act on — it goes
+        # to the debug log only. The main (error-level) line stays a
+        # consistent, human-readable message for every parse failure,
+        # whatever the underlying exception type turned out to be.
+        logger.debug("SARIF parse failure detail: %s: %s", type(exc).__name__, exc)
+        logger.error("Failed to parse SARIF: malformed or unexpected file structure")
         return 1
 
     if not runs:

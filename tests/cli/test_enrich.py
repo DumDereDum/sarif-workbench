@@ -47,6 +47,23 @@ def test_enrich_returns_1_on_empty_file(tmp_path):
     code = enrich(Args(INVALID / "empty_file.sarif", out=out))
     assert code == 1
 
+def test_enrich_returns_1_on_wrong_type_runs(tmp_path, caplog):
+    """T-64 regression: "runs" typed as a string (not a list/object) makes
+    the parser raise a bare AttributeError ("'str' object has no attribute
+    'get'") — before this fix that propagated out of enrich() as an
+    uncaught traceback instead of the controlled exit malformed_json/
+    empty_file already get. It must now be caught and reported the same way
+    (exit 1, human-readable error line), and the raw exception text must not
+    land in the default (error-level) log output.
+    """
+    out = tmp_path / "out.swbmeta.json"
+    with caplog.at_level(logging.ERROR):
+        code = enrich(Args(INVALID / "wrong_type_runs.sarif", out=out))
+    assert code == 1
+    assert "Failed to parse SARIF" in caplog.text
+    assert "has no attribute" not in caplog.text
+    assert not out.exists()
+
 
 # ── output correctness ────────────────────────────────────────────────────────
 

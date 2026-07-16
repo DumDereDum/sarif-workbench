@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import uuid
@@ -24,6 +25,7 @@ from ..models import Finding, FindingIdentity, Project, Rule, Run
 from ..storage import load_blob, save_blob
 from ..verdicts import recompute_counts_by_verdict, write_verdict
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 # Колонки находки, по которым можно сортировать напрямую (белый список — не
@@ -204,7 +206,11 @@ def _dedup_response(
     ingest'ом с той же find-or-create identity логикой, что и обычная загрузка;
     вердикты не теряются — они живут на identity, не на Finding.
     """
-    saved_meta_bytes = load_blob(str(existing.meta_key))
+    try:
+        saved_meta_bytes = load_blob(str(existing.meta_key))
+    except FileNotFoundError:
+        logger.error("[runs] meta blob missing for run=%s key=%s", existing.id, existing.meta_key)
+        raise HTTPException(500, {"error": "blob_missing", "message": "Stored meta file is missing"})
     if saved_meta_bytes == meta_bytes:
         return {
             "run_id": existing.id,
@@ -221,7 +227,8 @@ def _dedup_response(
     except MetaValidationError as exc:
         raise HTTPException(422, {"error": "invalid_meta", "message": str(exc)})
     except Exception as exc:
-        raise HTTPException(422, {"error": "invalid_sarif", "message": str(exc)})
+        logger.warning("[runs] SARIF parse failed during re-ingest: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(422, {"error": "invalid_sarif", "message": "Malformed SARIF file"})
 
     save_blob(str(existing.meta_key), meta_bytes)
     db.query(Finding).filter(Finding.run_id == existing.id).delete()
@@ -308,7 +315,8 @@ async def upload_run(
     except MetaValidationError as exc:
         raise HTTPException(422, {"error": "invalid_meta", "message": str(exc)})
     except Exception as exc:
-        raise HTTPException(422, {"error": "invalid_sarif", "message": str(exc)})
+        logger.warning("[runs] SARIF parse failed: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(422, {"error": "invalid_sarif", "message": "Malformed SARIF file"})
 
     # Save blobs
     run_id = "r-" + uuid.uuid4().hex[:10]
@@ -623,7 +631,11 @@ def get_sarif(run_id: str, db: Session = Depends(get_db)):
     run = db.query(Run).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
-    data = load_blob(run.sarif_key)  # type: ignore[arg-type]
+    try:
+        data = load_blob(run.sarif_key)  # type: ignore[arg-type]
+    except FileNotFoundError:
+        logger.error("[runs] SARIF blob missing for run=%s key=%s", run_id, run.sarif_key)
+        raise HTTPException(500, {"error": "blob_missing", "message": "Stored SARIF file is missing"})
     return Response(content=data, media_type="application/json")
 
 

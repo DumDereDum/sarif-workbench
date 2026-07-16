@@ -68,8 +68,8 @@ def get_report(
     try:
         pdf_bytes = generate_pdf(run, project, findings)
     except Exception as exc:
-        logger.error("[report] PDF generation failed: %s", exc)
-        raise HTTPException(500, {"error": "pdf_error", "message": str(exc)})
+        logger.error("[report] PDF generation failed: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(500, {"error": "pdf_error", "message": "Failed to generate PDF report"})
 
     filename = f"report-{run_id}.pdf"
     return Response(

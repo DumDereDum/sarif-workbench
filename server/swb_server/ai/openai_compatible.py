@@ -98,7 +98,12 @@ async def call_openai_compatible(
             "[%s] CONNECT FAILED after %.2fs  model=%s  url=%s  error=%s",
             provider_name, elapsed, model, url, exc,
         )
-        raise RuntimeError(f"Не удалось подключиться к провайдеру {provider_name} ({url}): {exc}") from exc
+        # T-64: the client-facing message must not carry the provider's
+        # base_url or the raw httpx connection error text — both are server
+        # infra details (e.g. an internal host/port for a self-hosted
+        # provider), not something the browser SSE consumer needs. Full
+        # detail stays in the log line above.
+        raise RuntimeError(f"Не удалось подключиться к провайдеру {provider_name}") from exc
     except httpx.TimeoutException as exc:
         elapsed = time.monotonic() - t0
         logger.error(

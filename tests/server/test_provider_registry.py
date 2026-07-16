@@ -443,3 +443,34 @@ def test_call_openai_compatible_raises_on_non_200(monkeypatch):
                 "https://api.deepseek.com", "bad-key", "deepseek-chat", "sys", "user"
             )
         )
+
+
+def test_call_openai_compatible_connect_error_does_not_leak_base_url(monkeypatch):
+    """T-64: the RuntimeError raised when the provider is unreachable used to
+    embed the (server-configured) base_url and the raw httpx exception text
+    verbatim — e.g. `Не удалось подключиться к провайдеру X (http://10.0.5.23:8000/
+    chat/completions): All connection attempts failed`. That message flows,
+    unmodified, all the way into `analyze_loop.py`'s SSE `error` event
+    `message` field, which the browser sees — an internal host/port for a
+    self-hosted provider (or any other httpx-internal detail) has no
+    business reaching the client; only the provider name and a generic
+    reason belong there. Full detail still lands in the server log (see the
+    logger.error call right above the raise in openai_compatible.py)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused", request=request)
+
+    _install_mock_transport(monkeypatch, handler)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        asyncio.run(
+            openai_compatible.call_openai_compatible(
+                "http://10.0.5.23:8000/v1", "key", "model", "sys", "user",
+                provider_name="internal-llm",
+            )
+        )
+
+    msg = str(excinfo.value)
+    assert "internal-llm" in msg
+    assert "10.0.5.23" not in msg
+    assert "8000" not in msg
+    assert "Connection refused" not in msg
