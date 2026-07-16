@@ -1,0 +1,28 @@
+{
+  "schema": "swbmeta/v3",
+  "generated_by": "tests/data/malicious fixture (T-53) — hand-crafted, not produced by swb-cli enrich",
+  "generated_at": "2026-07-16T00:00:00Z",
+  "source_sarif": {
+    "filename": "broken_locator.sarif",
+    "sha256": "PATCHED_AT_TEST_TIME__see_tests/server/test_malicious_input.py",
+    "size_bytes": 0
+  },
+  "provenance": {
+    "repo": "PATCHED_AT_TEST_TIME__see_tests/server/test_malicious_input.py"
+  },
+  "findings": [
+    {
+      "swb_id": "sw2:t:deadbeefdeadbeefdeadbeef:0",
+      "occurrence": 0,
+      "locator": {
+        "run": 0,
+        "result": 999,
+        "rule_id": "CWE-89",
+        "uri": "src/db.py",
+        "norm_uri": "src/db.py",
+        "region": { "start_line": 42, "start_column": 8 }
+      },
+      "fingerprints": { "algo": "swb-fp/2", "level": "tool", "rule": "CWE-89" }
+    }
+  ]
+}

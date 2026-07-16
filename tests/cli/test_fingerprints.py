@@ -8,6 +8,7 @@ from swb_cli.fingerprints import content_hash, normalize_uri, normalize_window
 
 DATA = Path(__file__).parent.parent / "data"
 VALID = DATA / "valid"
+MALICIOUS = DATA / "malicious"
 SRC = DATA / "src"
 
 
@@ -203,7 +204,7 @@ def test_legacy_when_source_missing(tmp_path):
     assert fp["content"] is None
 
 def test_legacy_when_uri_escapes_repo_root(tmp_path):
-    data = _enrich(VALID / "path_traversal.sarif", tmp_path, repo_root=DATA)
+    data = _enrich(MALICIOUS / "path_traversal.sarif", tmp_path, repo_root=DATA)
     by_uri = {f["locator"]["uri"]: f["fingerprints"] for f in data["findings"]}
     assert by_uri["../../../../../../../../etc/passwd"]["level"] == "legacy"
     assert by_uri["../../../../../../../../etc/passwd"]["content"] is None

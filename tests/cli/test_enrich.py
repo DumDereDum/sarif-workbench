@@ -9,6 +9,7 @@ from swb_cli.commands.enrich import _get_git_info, enrich
 DATA = Path(__file__).parent.parent / "data"
 VALID = DATA / "valid"
 INVALID = DATA / "invalid"
+MALICIOUS = DATA / "malicious"
 
 
 class Args:
@@ -328,7 +329,7 @@ def test_enrich_traversal_uris_get_null_code_and_warn(tmp_path, caplog):
     # вредоносные находки получают code=None, легитимная обогащается как раньше
     out = tmp_path / "out.swbmeta.json"
     with caplog.at_level(logging.WARNING):
-        code = enrich(Args(VALID / "path_traversal.sarif", out=out,
+        code = enrich(Args(MALICIOUS / "path_traversal.sarif", out=out,
                            repo_root=DATA, context_policy="line"))
     assert code == 0
     data = json.loads(out.read_text())
