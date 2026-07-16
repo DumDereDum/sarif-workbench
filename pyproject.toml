@@ -1,2 +1,20 @@
 [tool.uv.workspace]
 members = ["cli", "server", "contract"]
+
+[dependency-groups]
+dev = ["ruff>=0.15", "mypy>=1.13"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+
+# boto3 (optional S3 storage backend) and weasyprint (PDF report) ship without
+# type stubs / py.typed markers — no stub packages exist upstream to add as a
+# dev dependency, so their imports are accepted untyped rather than pulled in
+# as `Any` project-wide.
+[[tool.mypy.overrides]]
+module = ["boto3", "weasyprint"]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py311"

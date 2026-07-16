@@ -1,7 +1,6 @@
 import hashlib
 import json
 import logging
-import pytest
 from pathlib import Path
 
 from swb_cli.commands.enrich import _get_git_info, enrich

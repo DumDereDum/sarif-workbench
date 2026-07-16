@@ -176,15 +176,16 @@ def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ing
                 write_verdict(
                     db,
                     identity,
-                    new_verdict=identity.verdict,
+                    new_verdict=identity.verdict,  # type: ignore[arg-type]
                     source="carried",
                     actor="system",
-                    rationale=identity.rationale,
+                    rationale=identity.rationale,  # type: ignore[arg-type]
                     run_id=run_id,
                 )
             identities[swb_id] = identity
-        identity.last_seen_run_id = run_id
-        identity.last_seen_at = now
+        # Column[T]-vs-T false positive (same class as verdicts.py:123, T-54)
+        identity.last_seen_run_id = run_id  # type: ignore[assignment]
+        identity.last_seen_at = now  # type: ignore[assignment]
         db.add(Finding(run_id=run_id, identity_id=identity.id, **fd))
 
 
@@ -211,7 +212,7 @@ def _dedup_response(
             "deduplicated": True,
             "meta_updated": False,
             "uploaded_at": existing.uploaded_at.isoformat() if existing.uploaded_at else None,
-            "finding_count": (existing.counts or {}).get("all", 0),
+            "finding_count": (existing.counts or {}).get("all", 0),  # type: ignore[call-overload]
             "counts": existing.counts or {},
         }
 
@@ -622,7 +623,7 @@ def get_sarif(run_id: str, db: Session = Depends(get_db)):
     run = db.query(Run).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
-    data = load_blob(run.sarif_key)
+    data = load_blob(run.sarif_key)  # type: ignore[arg-type]
     return Response(content=data, media_type="application/json")
 
 

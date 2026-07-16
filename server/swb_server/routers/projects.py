@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Finding, Project, Run
+from ..models import Project, Run
 
 router = APIRouter(prefix="/api/v1")
 
@@ -81,6 +81,6 @@ def set_baseline(project_id: str, body: dict, db: Session = Depends(get_db)):
         if not run:
             raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
 
-    project.baseline_run_id = baseline_run_id
+    project.baseline_run_id = baseline_run_id  # type: ignore[assignment]
     db.commit()
     return {"baseline_run_id": baseline_run_id}

@@ -142,25 +142,28 @@ def write_verdict(
     db.add(event)
 
     # Снапшот текущего состояния (денормализация; источник истины — события)
-    identity.verdict = new_verdict
+    # Присваивания identity.* ниже — тот же Column[T]-vs-T false positive, что
+    # и на строке 123 выше (см. комментарий там); T-54 глушит их точечно, не
+    # трогая рантайм-поведение.
+    identity.verdict = new_verdict  # type: ignore[assignment]
     # carried не меняет, кто принял решение по существу (T-27, ADR 0001 §6):
     # это лишь подтверждение прежнего вердикта в новом скане, поэтому снапшот
     # verdict_source остаётся тем, чем был (human/ai/reset), не "carried".
     if source != "carried":
-        identity.verdict_source = source
-    identity.rationale = rationale
+        identity.verdict_source = source  # type: ignore[assignment]
+    identity.rationale = rationale  # type: ignore[assignment]
     if source == "ai":
-        identity.provider = provider
-        identity.model = model
-        identity.prompt_id = prompt_id
-        identity.prompt_version = prompt_version
-        identity.needs_reconfirm = False
+        identity.provider = provider  # type: ignore[assignment]
+        identity.model = model  # type: ignore[assignment]
+        identity.prompt_id = prompt_id  # type: ignore[assignment]
+        identity.prompt_version = prompt_version  # type: ignore[assignment]
+        identity.needs_reconfirm = False  # type: ignore[assignment]
     elif source == "reset":
-        identity.provider = None
-        identity.model = None
-        identity.prompt_id = None
-        identity.prompt_version = None
-        identity.needs_reconfirm = False
+        identity.provider = None  # type: ignore[assignment]
+        identity.model = None  # type: ignore[assignment]
+        identity.prompt_id = None  # type: ignore[assignment]
+        identity.prompt_version = None  # type: ignore[assignment]
+        identity.needs_reconfirm = False  # type: ignore[assignment]
     # human/carried: атрибуты последнего AI-вердикта на снапшоте не трогаем
 
     if expected_version is None:
@@ -225,5 +228,5 @@ def recompute_counts_by_verdict(db: Session, run_id: str) -> dict[str, int]:
 
     run = db.query(Run).filter(Run.id == run_id).first()
     if run is not None:
-        run.counts_by_verdict = counts
+        run.counts_by_verdict = counts  # type: ignore[assignment]
     return counts
