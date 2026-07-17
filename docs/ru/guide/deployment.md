@@ -46,7 +46,13 @@ make debug
 
 Собирает оптимизированный React-бандл, отдаёт его через nginx на порту 80 и проксирует `/api/` на FastAPI. Данные хранятся в Docker-volume.
 
+`docker-compose.prod.yml` требует четыре переменные `POSTGRES_*`/`MINIO_ROOT_*` **без значений по
+умолчанию** (см. раздел «Переменные среды» ниже). Docker Compose подставляет значения всех
+`${VAR}` во всём файле ещё до применения `--profile`, поэтому команда ниже падает без них, даже
+если она не поднимает ни Postgres, ни MinIO. Сначала скопируйте шаблон:
+
 ```bash
+cp .env.example .env   # затем отредактируйте плейсхолдеры POSTGRES_*/MINIO_ROOT_*
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
@@ -73,6 +79,17 @@ cp .env.example .env
 | `LOG_FILE` | _(пусто)_ | Путь к файлу логов. В Docker `./logs/server.log` монтируется в `/logs/server.log` |
 | `DATA_DIR` | `/data` | Директория для SQLite DB и BLOB-файлов |
 | `DATABASE_URL` | `sqlite:////data/swb.db` | Путь к SQLite-базе данных |
+| `POSTGRES_USER` | _(обязательна, без дефолта)_ | Имя пользователя Postgres для опционального сервиса `postgres` (`--profile postgres`) |
+| `POSTGRES_PASSWORD` | _(обязательна, без дефолта)_ | Пароль Postgres — не используйте плейсхолдер из `.env.example` как есть |
+| `MINIO_ROOT_USER` | _(обязательна, без дефолта)_ | Root-имя пользователя MinIO для опционального сервиса `minio` (`--profile s3`) |
+| `MINIO_ROOT_PASSWORD` | _(обязательна, без дефолта)_ | Root-пароль MinIO — минимум 8 символов (требование самого MinIO) |
+
+Последние четыре переменные нужны только опциональным сервисам `postgres`/`minio`, но Docker
+Compose подставляет значения всех `${VAR}` в `docker-compose.prod.yml` ещё до применения
+профилей — поэтому **все четыре обязательны даже для обычной команды `docker compose -f
+docker-compose.prod.yml up`** (только server + web, без Postgres/MinIO). Без них Compose
+откажется стартовать с ошибкой `required variable ... is missing a value`. В `.env.example` они
+идут как плейсхолдеры `changeme-*` — замените на реальные значения перед настоящим деплоем.
 
 ---
 

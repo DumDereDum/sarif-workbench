@@ -45,7 +45,13 @@ make debug
 
 Builds a optimized React bundle, serves it via nginx on port 80, and proxies `/api/` to FastAPI. Data is stored in a Docker volume.
 
+`docker-compose.prod.yml` requires four `POSTGRES_*`/`MINIO_ROOT_*` variables that have **no
+built-in default** (see [Environment variables](#environment-variables) below). Docker Compose
+interpolates every `${VAR}` in the file before applying `--profile`, so the command below fails
+without them even though it starts neither Postgres nor MinIO. Copy the template first:
+
 ```bash
+cp .env.example .env   # then edit the POSTGRES_*/MINIO_ROOT_* placeholders
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
@@ -72,6 +78,17 @@ cp .env.example .env
 | `LOG_FILE` | _(empty)_ | Log file path. In Docker, `./logs/server.log` is mounted to `/logs/server.log` |
 | `DATA_DIR` | `/data` | Directory for SQLite DB and blob files |
 | `DATABASE_URL` | `sqlite:////data/swb.db` | SQLite database path |
+| `POSTGRES_USER` | _(required — no default)_ | Postgres username for the optional `postgres` service (`--profile postgres`) |
+| `POSTGRES_PASSWORD` | _(required — no default)_ | Postgres password — don't reuse the placeholder shipped in `.env.example` |
+| `MINIO_ROOT_USER` | _(required — no default)_ | MinIO root username for the optional `minio` service (`--profile s3`) |
+| `MINIO_ROOT_PASSWORD` | _(required — no default)_ | MinIO root password — minimum 8 characters (MinIO's own requirement) |
+
+The last four variables only matter to the optional `postgres`/`minio` services, but Docker
+Compose interpolates every `${VAR}` in `docker-compose.prod.yml` before profile filtering is
+applied — so **all four must be set even for the plain `docker compose -f
+docker-compose.prod.yml up` command** (server + web only, no Postgres/MinIO). Without them,
+Compose refuses to start with a `required variable ... is missing a value` error. `.env.example`
+ships them as `changeme-*` placeholders — replace with real values before a real deployment.
 
 ---
 
