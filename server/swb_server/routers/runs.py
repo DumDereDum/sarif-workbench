@@ -19,6 +19,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from swb_contract.severity import SEV_ORDER
 from swb_contract.verdict import VERDICT_ORDER
 
+from ..ai.analyze_loop import is_analysis_in_progress
 from ..db import get_db
 from ..ingest import MetaValidationError, ingest
 from ..models import Finding, FindingIdentity, Project, Rule, Run
@@ -598,6 +599,20 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
     run = db.query(Run).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
+
+    # T-66: reset racing a live AI analysis for the same run left it in a
+    # partially-marked state (analyze writes verdicts finding-by-finding
+    # while reset clears them concurrently). Reject outright rather than
+    # trying to interleave the two — the caller can retry once analysis
+    # finishes or is cancelled.
+    if is_analysis_in_progress(run_id):
+        raise HTTPException(
+            409,
+            {
+                "error": "analysis_in_progress",
+                "message": "Cannot reset while AI analysis is running for this run",
+            },
+        )
 
     findings = db.query(Finding).filter(Finding.run_id == run_id).all()
     # Сброс снапшотов identity, встречающихся в ране, через writer-одиночку;

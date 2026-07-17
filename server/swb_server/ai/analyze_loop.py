@@ -41,6 +41,20 @@ def max_consecutive_errors() -> int:
     return int(os.environ.get("SWB_ANALYZE_MAX_CONSECUTIVE_ERRORS", DEFAULT_MAX_CONSECUTIVE_ERRORS))
 
 
+# T-66: простой in-memory guard — reset во время анализа (routers/runs.py::
+# reset_verdicts) оставлял ран в частично размеченном состоянии, потому что
+# ничто не отслеживало "анализ этого рана сейчас идёт". Одна переменная
+# модуля достаточна для однопроцессного sqlite-стека проекта (см.
+# sarif-workbench-context: "SQLite check_same_thread=False... на конкурентные
+# записи не рассчитано" — проект уже принимает single-process допущение);
+# персистентность/межпроцессная синхронизация не нужны.
+_active_runs: set[str] = set()
+
+
+def is_analysis_in_progress(run_id: str) -> bool:
+    return run_id in _active_runs
+
+
 def load_findings_for_analysis(
     session: Session,
     run_id: str,
@@ -109,172 +123,184 @@ async def run_analysis(
     передан) — отмена анализа клиентом реально прекращает дальнейшие вызовы
     к LLM, а не только скрывает прогресс в браузере.
     """
-    total = len(findings)
+    # T-66: register this run as "analysis in progress" for the duration of
+    # the whole generator body — including the `total == 0` early-return
+    # path — so a concurrent reset (routers/runs.py::reset_verdicts) can
+    # detect and refuse it (409) instead of racing partially-written
+    # verdicts. `finally` runs on normal completion, an exception, AND
+    # `.aclose()` (which Python calls when an `async for` consuming this
+    # generator exits early, e.g. client disconnect) — the standard
+    # async-generator guarantee, no extra plumbing needed.
+    _active_runs.add(run_id)
+    try:
+        total = len(findings)
 
-    if max_errors is None:
-        max_errors = max_consecutive_errors()
+        if max_errors is None:
+            max_errors = max_consecutive_errors()
 
-    if total == 0:
-        yield {
-            "type": "done", "done": 0, "total": 0, "tokens_total": 0,
-            "skipped_human": skipped_human, "message": "Нет находок для анализа",
-        }
-        return
-
-    yield {"type": "start", "total": total, "skipped_human": skipped_human}
-
-    tokens_total = 0
-    processed = 0
-    consecutive_errors = 0
-    stopped_reason: str | None = None
-
-    for idx, finding in enumerate(findings, start=1):
-        if is_disconnected is not None and await is_disconnected():
-            stopped_reason = "disconnected"
-            logger.info(
-                "[analyze] run_id=%s client disconnected — stopping before finding %d/%d",
-                run_id, idx, total,
-            )
-            break
-
-        logger.debug(
-            "[analyze] [%d/%d] processing finding id=%s  rule=%s  severity=%s  %s:%s",
-            idx, total, finding.id, finding.rule_id, finding.severity,
-            finding.uri, finding.start_line,
-        )
-        try:
-            user_msg = build_user_message(finding)
-            logger.debug("[analyze] [%d/%d] user_message built (%d chars)", idx, total, len(user_msg))
-
-            result = await call_llm(
-                provider=provider,
-                model=model,
-                system=system_prompt,
-                user=user_msg,
-            )
-
-            raw_content = result["content"]
-            verdict, rationale = parse_response(raw_content, prompt_id)
-            tokens_total += result.get("tokens", 0)
-            consecutive_errors = 0  # успешный вызов провайдера сбрасывает breaker
-
-            logger.info(
-                "[analyze] [%d/%d] finding=%s  verdict=%s  tokens_this=%d  tokens_total=%d",
-                idx, total, finding.id, verdict, result.get("tokens", 0), tokens_total,
-            )
-            # T-43: raw_content/rationale are LLM output built from the
-            # finding's source snippet (ai/prompts.py) and can quote it back
-            # verbatim — log only their length, never the text, at any level.
-            logger.debug(
-                "[analyze] [%d/%d] raw_response_len=%d chars", idx, total, len(raw_content),
-            )
-            logger.debug(
-                "[analyze] [%d/%d] parsed  verdict=%s  rationale_len=%d chars",
-                idx, total, verdict, len(rationale),
-            )
-
-            # T-32 (остаточный риск T-24): между постановкой в очередь этой
-            # находки и получением ответа LLM прошло сетевое время — за это
-            # время человек мог поставить свой вердикт через PATCH. Проверка
-            # verdict_source на входе в батч этого не ловит (TOCTOU):
-            # перечитываем identity непосредственно перед записью, не
-            # полагаясь на объект, загруженный/закэшированный на входе.
-            identity = finding.identity
-            if not override:
-                session.refresh(identity)
-                if identity.verdict_source == "human" and identity.verdict != "unmarked":
-                    skipped_human += 1
-                    processed += 1
-                    logger.info(
-                        "[analyze] [%d/%d] finding=%s SKIPPED — concurrent human verdict "
-                        "landed while waiting on LLM response",
-                        idx, total, finding.id,
-                    )
-                    yield {
-                        "type": "progress",
-                        "done": processed,
-                        "total": total,
-                        "tokens_total": tokens_total,
-                        "finding_id": finding.id,
-                        "verdict": identity.verdict,
-                        "rationale": identity.rationale,
-                        "skipped_human": True,
-                    }
-                    continue
-
-            write_verdict(
-                session,
-                identity,
-                new_verdict=verdict,
-                source="ai",
-                actor=f"ai:{provider}/{model}",
-                rationale=rationale,
-                provider=provider,
-                model=model,
-                prompt_id=prompt_id,
-                prompt_version=prompt_version,
-                run_id=run_id,
-            )
-
-            session.commit()
-            processed += 1
-            logger.debug("[analyze] [%d/%d] committed to DB", idx, total)
-
+        if total == 0:
             yield {
-                "type": "progress",
-                "done": processed,
-                "total": total,
-                "tokens_total": tokens_total,
-                "finding_id": finding.id,
-                "verdict": verdict,
-                "rationale": rationale,
+                "type": "done", "done": 0, "total": 0, "tokens_total": 0,
+                "skipped_human": skipped_human, "message": "Нет находок для анализа",
             }
+            return
 
-        except Exception as exc:
-            processed += 1
-            consecutive_errors += 1
-            msg = str(exc)
-            logger.error(
-                "[analyze] [%d/%d] FAILED finding=%s (%s:%s)  error=%s: %s  (consecutive_errors=%d/%d)",
-                idx, total, finding.id, finding.uri, finding.start_line,
-                type(exc).__name__, msg, consecutive_errors, max_errors,
-            )
-            yield {
-                "type": "error",
-                "done": processed,
-                "total": total,
-                "tokens_total": tokens_total,
-                "finding_id": finding.id,
-                "uri": finding.uri or "",
-                "start_line": finding.start_line or 0,
-                "message": msg,
-            }
+        yield {"type": "start", "total": total, "skipped_human": skipped_human}
 
-            if max_errors > 0 and consecutive_errors >= max_errors:
-                stopped_reason = "circuit_breaker"
-                logger.error(
-                    "[analyze] run_id=%s circuit breaker tripped: %d consecutive provider "
-                    "errors — stopping at finding %d/%d",
-                    run_id, consecutive_errors, idx, total,
+        tokens_total = 0
+        processed = 0
+        consecutive_errors = 0
+        stopped_reason: str | None = None
+
+        for idx, finding in enumerate(findings, start=1):
+            if is_disconnected is not None and await is_disconnected():
+                stopped_reason = "disconnected"
+                logger.info(
+                    "[analyze] run_id=%s client disconnected — stopping before finding %d/%d",
+                    run_id, idx, total,
                 )
                 break
 
-    # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
-    cvd = recompute_counts_by_verdict(session, run_id)
-    session.commit()
-    logger.info(
-        "[analyze] DONE run_id=%s  counts=%s  tokens_total=%d  processed=%d/%d  stopped_reason=%s",
-        run_id, cvd, tokens_total, processed, total, stopped_reason,
-    )
+            logger.debug(
+                "[analyze] [%d/%d] processing finding id=%s  rule=%s  severity=%s  %s:%s",
+                idx, total, finding.id, finding.rule_id, finding.severity,
+                finding.uri, finding.start_line,
+            )
+            try:
+                user_msg = build_user_message(finding)
+                logger.debug("[analyze] [%d/%d] user_message built (%d chars)", idx, total, len(user_msg))
 
-    done_event: dict = {
-        "type": "done",
-        "done": processed,
-        "total": total,
-        "tokens_total": tokens_total,
-        "skipped_human": skipped_human,
-    }
-    if stopped_reason is not None:
-        done_event["stopped_reason"] = stopped_reason
-        done_event["message"] = _stop_message(stopped_reason, consecutive_errors, max_errors)
-    yield done_event
+                result = await call_llm(
+                    provider=provider,
+                    model=model,
+                    system=system_prompt,
+                    user=user_msg,
+                )
+
+                raw_content = result["content"]
+                verdict, rationale = parse_response(raw_content, prompt_id)
+                tokens_total += result.get("tokens", 0)
+                consecutive_errors = 0  # успешный вызов провайдера сбрасывает breaker
+
+                logger.info(
+                    "[analyze] [%d/%d] finding=%s  verdict=%s  tokens_this=%d  tokens_total=%d",
+                    idx, total, finding.id, verdict, result.get("tokens", 0), tokens_total,
+                )
+                # T-43: raw_content/rationale are LLM output built from the
+                # finding's source snippet (ai/prompts.py) and can quote it back
+                # verbatim — log only their length, never the text, at any level.
+                logger.debug(
+                    "[analyze] [%d/%d] raw_response_len=%d chars", idx, total, len(raw_content),
+                )
+                logger.debug(
+                    "[analyze] [%d/%d] parsed  verdict=%s  rationale_len=%d chars",
+                    idx, total, verdict, len(rationale),
+                )
+
+                # T-32 (остаточный риск T-24): между постановкой в очередь этой
+                # находки и получением ответа LLM прошло сетевое время — за это
+                # время человек мог поставить свой вердикт через PATCH. Проверка
+                # verdict_source на входе в батч этого не ловит (TOCTOU):
+                # перечитываем identity непосредственно перед записью, не
+                # полагаясь на объект, загруженный/закэшированный на входе.
+                identity = finding.identity
+                if not override:
+                    session.refresh(identity)
+                    if identity.verdict_source == "human" and identity.verdict != "unmarked":
+                        skipped_human += 1
+                        processed += 1
+                        logger.info(
+                            "[analyze] [%d/%d] finding=%s SKIPPED — concurrent human verdict "
+                            "landed while waiting on LLM response",
+                            idx, total, finding.id,
+                        )
+                        yield {
+                            "type": "progress",
+                            "done": processed,
+                            "total": total,
+                            "tokens_total": tokens_total,
+                            "finding_id": finding.id,
+                            "verdict": identity.verdict,
+                            "rationale": identity.rationale,
+                            "skipped_human": True,
+                        }
+                        continue
+
+                write_verdict(
+                    session,
+                    identity,
+                    new_verdict=verdict,
+                    source="ai",
+                    actor=f"ai:{provider}/{model}",
+                    rationale=rationale,
+                    provider=provider,
+                    model=model,
+                    prompt_id=prompt_id,
+                    prompt_version=prompt_version,
+                    run_id=run_id,
+                )
+
+                session.commit()
+                processed += 1
+                logger.debug("[analyze] [%d/%d] committed to DB", idx, total)
+
+                yield {
+                    "type": "progress",
+                    "done": processed,
+                    "total": total,
+                    "tokens_total": tokens_total,
+                    "finding_id": finding.id,
+                    "verdict": verdict,
+                    "rationale": rationale,
+                }
+
+            except Exception as exc:
+                processed += 1
+                consecutive_errors += 1
+                msg = str(exc)
+                logger.error(
+                    "[analyze] [%d/%d] FAILED finding=%s (%s:%s)  error=%s: %s  (consecutive_errors=%d/%d)",
+                    idx, total, finding.id, finding.uri, finding.start_line,
+                    type(exc).__name__, msg, consecutive_errors, max_errors,
+                )
+                yield {
+                    "type": "error",
+                    "done": processed,
+                    "total": total,
+                    "tokens_total": tokens_total,
+                    "finding_id": finding.id,
+                    "uri": finding.uri or "",
+                    "start_line": finding.start_line or 0,
+                    "message": msg,
+                }
+
+                if max_errors > 0 and consecutive_errors >= max_errors:
+                    stopped_reason = "circuit_breaker"
+                    logger.error(
+                        "[analyze] run_id=%s circuit breaker tripped: %d consecutive provider "
+                        "errors — stopping at finding %d/%d",
+                        run_id, consecutive_errors, idx, total,
+                    )
+                    break
+
+        # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
+        cvd = recompute_counts_by_verdict(session, run_id)
+        session.commit()
+        logger.info(
+            "[analyze] DONE run_id=%s  counts=%s  tokens_total=%d  processed=%d/%d  stopped_reason=%s",
+            run_id, cvd, tokens_total, processed, total, stopped_reason,
+        )
+
+        done_event: dict = {
+            "type": "done",
+            "done": processed,
+            "total": total,
+            "tokens_total": tokens_total,
+            "skipped_human": skipped_human,
+        }
+        if stopped_reason is not None:
+            done_event["stopped_reason"] = stopped_reason
+            done_event["message"] = _stop_message(stopped_reason, consecutive_errors, max_errors)
+        yield done_event
+    finally:
+        _active_runs.discard(run_id)

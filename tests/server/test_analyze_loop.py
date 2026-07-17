@@ -211,3 +211,88 @@ def test_disconnect_checked_before_first_provider_call(db_session, upload_run, m
     assert done["stopped_reason"] == "disconnected"
     assert done["done"] == 0
     assert done["total"] == 3
+
+
+# ── In-progress guard (T-66) ──────────────────────────────────────────────────
+#
+# reset во время analyze (routers/runs.py::reset_verdicts) раньше оставлял ран
+# в частично размеченном состоянии — ничто не отслеживало, что анализ этого
+# рана ещё идёт. `is_analysis_in_progress` — простой in-memory guard,
+# выставляемый на весь async-generator body `run_analysis` через try/finally.
+
+
+def test_in_progress_guard_true_during_analysis_false_after(db_session, upload_run, monkeypatch, analyze_loop):
+    """Guard is set before the first yield and cleared once the generator
+    runs to completion.
+
+    NOTE: the whole scenario runs inside a single `asyncio.run()` call, not
+    one `asyncio.run()` per `__anext__()` — `asyncio.run()` calls
+    `loop.shutdown_asyncgens()` on exit, which force-closes (`aclose()`s)
+    any async generator created during that run and not yet exhausted. A
+    separate `asyncio.run()` per step would therefore close (and clear the
+    guard on) this generator after the very first step, before the test
+    could observe the "in progress" state at all.
+    """
+    run = _make_run(upload_run, 3)
+    findings = _findings_for_run(db_session, run["run_id"])
+    run_id = run["run_id"]
+
+    async def _ok(**kwargs):
+        return {"content": "Verdict: false_positive\nRationale: ok", "tokens": 1}
+
+    monkeypatch.setattr(analyze_loop, "call_llm", _ok)
+
+    assert analyze_loop.is_analysis_in_progress(run_id) is False
+
+    async def scenario():
+        agen = analyze_loop.run_analysis(db_session, run_id, findings, **_run_kwargs())
+        first_event = await agen.__anext__()
+        assert first_event["type"] == "start"
+        # guard is set for the whole generator body, before the first "start" yield
+        assert analyze_loop.is_analysis_in_progress(run_id) is True
+
+        remaining = [e async for e in agen]
+        assert remaining[-1]["type"] == "done"
+        # generator ran to completion -> finally cleared the guard
+        assert analyze_loop.is_analysis_in_progress(run_id) is False
+
+    asyncio.run(scenario())
+    assert analyze_loop.is_analysis_in_progress(run_id) is False
+
+
+def test_in_progress_guard_cleared_on_early_close(db_session, upload_run, monkeypatch, analyze_loop):
+    """Генератор не доведён до конца (aclose — как при отмене клиента через
+    `async for ... break`/`.aclose()`) — guard всё равно снимается через finally.
+
+    See NOTE above the previous test for why this runs inside one
+    `asyncio.run()` call rather than one per step.
+    """
+    run = _make_run(upload_run, 3)
+    findings = _findings_for_run(db_session, run["run_id"])
+    run_id = run["run_id"]
+
+    async def _ok(**kwargs):
+        return {"content": "Verdict: false_positive\nRationale: ok", "tokens": 1}
+
+    monkeypatch.setattr(analyze_loop, "call_llm", _ok)
+
+    async def scenario():
+        agen = analyze_loop.run_analysis(db_session, run_id, findings, **_run_kwargs())
+        await agen.__anext__()
+        assert analyze_loop.is_analysis_in_progress(run_id) is True
+
+        await agen.aclose()
+        assert analyze_loop.is_analysis_in_progress(run_id) is False
+
+    asyncio.run(scenario())
+    assert analyze_loop.is_analysis_in_progress(run_id) is False
+
+
+def test_in_progress_guard_cleared_when_total_is_zero(db_session, upload_run, monkeypatch, analyze_loop):
+    """total == 0 — the early-return path (`return` right after the first
+    yield) must also go through the `finally` cleanup, not bypass it."""
+    run_id = "r-nonexistent-empty"
+
+    events = _collect(analyze_loop.run_analysis(db_session, run_id, [], **_run_kwargs()))
+    assert events[0]["type"] == "done"
+    assert analyze_loop.is_analysis_in_progress(run_id) is False

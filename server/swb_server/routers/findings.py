@@ -48,7 +48,15 @@ def _serialize_finding(db: Session, f: Finding) -> dict:
     """
     snippet_obj = None
     if f.snippet is not None:
-        lines = f.snippet.split("\n")
+        # T-66: normalize line endings before splitting. The CLI's own
+        # snippet builder (cli/swb_cli/code.py) never leaves a `\r` in the
+        # stored text (Path.read_text uses universal-newline translation,
+        # and the snippet is re-joined with plain "\n"), but `f.snippet` is
+        # untrusted at this boundary — it can come from any tool/upload that
+        # produces a valid swbmeta payload, not just our CLI. Normalizing
+        # here (rather than trusting `.split("\n")`) keeps a stray `\r` from
+        # a CRLF-authored file out of the API response.
+        lines = f.snippet.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         snippet_obj = {
             "start_line": f.snippet_start or f.start_line,
             "end_line": f.snippet_end,
