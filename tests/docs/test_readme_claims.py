@@ -7,15 +7,14 @@
 - (T-42) облачные AI-провайдеры не должны подаваться как включённые без оговорок —
   README обязан отражать disabled-by-default/opt-in модель, а не "planned"
   (локальный провайдер — реальный дефолт с T-42, это больше не "planned");
-- заявленное число тестов не должно превышать фактическое количество собранных
-  pytest-тестов;
+- (T-67) число тестов протухало дважды (83 -> 151 -> 356) быстрее, чем кто-то
+  вспоминал его обновить — README больше не называет конкретную цифру, тест не
+  даёт её туда вернуть;
 - режим `force_fp` должен быть упомянут в описании AI-триажа.
 """
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -92,26 +91,21 @@ def test_force_fp_mode_mentioned():
     assert "force_fp" in text, "режим force_fp (server/swb_server/ai/prompts.py) не упомянут в README"
 
 
-def test_documented_test_count_does_not_overstate_reality():
+def test_no_hardcoded_test_count_in_readme():
+    """T-67: конкретное число тестов в README дважды протухало (83 -> 151 -> 356)
+    быстрее, чем кто-то вспоминал обновить строку — предыдущая версия этого теста
+    проверяла только `documented <= actual`, поэтому дрейф проходил молча. Вместо
+    гонки за актуальным числом README ссылается на живой источник (CI-бейдж вверху
+    файла / `uv run pytest --collect-only -q tests/`). Тест не даёт снова
+    закоммитить конкретную цифру рядом с "pytest test suite"."""
     text = _readme_text()
-    match = re.search(r"pytest test suite \((\d+)\+?\s*tests\)", text)
-    assert match, "не найдена строка с числом тестов в README (Project structure)"
-    documented = int(match.group(1))
-
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "tests/"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert result.returncode == 0, f"сбор тестов упал:\n{result.stdout}\n{result.stderr}"
-
-    summary_match = re.search(r"(\d+) tests? collected", result.stdout)
-    assert summary_match, f"не удалось распарсить количество собранных тестов:\n{result.stdout}"
-    actual = int(summary_match.group(1))
-
-    assert documented <= actual, (
-        f"README заявляет {documented} тестов, но реально собрано только {actual} — "
-        "число в README не должно превышать действительность"
-    )
+    found_line = False
+    for line in text.splitlines():
+        if "pytest test suite" in line:
+            found_line = True
+            assert not re.search(r"\d+\+?\s*tests?\b", line), (
+                f"README снова содержит захардкоженное число тестов, которое будет "
+                f"молча протухать: {line!r} — сошлись на CI-бейдж или "
+                "`pytest --collect-only` вместо конкретной цифры"
+            )
+    assert found_line, "не найдена строка про pytest test suite в README (Development)"

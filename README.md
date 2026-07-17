@@ -84,7 +84,7 @@ reports you'd rather not post publicly, reach out privately via the maintainer's
 
 ```bash
 uv sync && (cd web && npm install)
-uv run pytest tests/ -v       # pytest test suite (325+ tests)
+uv run pytest tests/ -v       # full pytest test suite (see CI badge above for current status)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR workflow and our
