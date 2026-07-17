@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Finding, FindingIdentity, Run
 from ..report_gen import generate_pdf
+from .runs import _severity_order_expr
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -42,7 +43,10 @@ def get_report(
         q = q.join(FindingIdentity, Finding.identity_id == FindingIdentity.id).filter(
             FindingIdentity.verdict.in_(verdicts)
         )
-    q = q.order_by(Finding.severity, Finding.uri, Finding.start_line)
+    # Смысловой порядок severity (critical>high>medium>low>note), не алфавитный
+    # (иначе "low" встаёт перед "medium") — та же CASE-эмуляция, что и для
+    # list_findings в runs.py (T-31).
+    q = q.order_by(_severity_order_expr(), Finding.uri, Finding.start_line)
 
     limit = _report_max_findings()
     # limit+1 достаточно, чтобы понять, что находок больше лимита, не вычитывая
