@@ -30,6 +30,27 @@ _VD_BG = {
     "unmarked":       "#555555",
 }
 
+# Подпись автора по `identity.verdict_source` (T-69). Реальные значения снапшота —
+# `human`/`ai`/`reset` (см. models.py, ADR 0001 §6); ключа `"manual"`, который был
+# здесь раньше, среди них никогда не бывает, поэтому для human/carried/reset
+# колонка автора в PDF всегда была пустой строкой. `"carried"` в этой карте — чисто
+# защитный случай: после T-27 `write_verdict` не пишет `"carried"` в снапшот
+# identity.verdict_source (пропускает обновление, снапшот остаётся тем, чем был —
+# human/ai), так что это значение сюда в норме не долетает; журнал verdict_events
+# честно хранит `source="carried"` отдельно и наружу здесь не смотрит (report_gen
+# получает только identity-снапшот, не события). Подпись оставлена на случай любых
+# иных путей записи (регрессия, прямая правка БД) — не пустая строка вместо неё.
+_VERDICT_SOURCE_LABEL = {
+    "human":   "Ручная верификация",
+    "ai":      "Автоматическая верификация",
+    "reset":   "Сброс вердикта",
+    "carried": "Перенесено при рескане",
+}
+
+
+def _verdict_source_label(source: str | None) -> str:
+    return _VERDICT_SOURCE_LABEL.get(source or "", "")
+
 
 def _h(s: str | None) -> str:
     return html.escape(str(s or ""))
@@ -367,8 +388,7 @@ def _finding_page(f: Any, idx: int, total: int) -> str:
 
     # Автор / дата / источник
     vd_at  = _fmt_date(f.verdict_at.isoformat() if getattr(f, "verdict_at", None) else None)
-    src_map = {"ai": "Автоматическая верификация", "manual": "Ручная верификация"}
-    author  = src_map.get((identity.verdict_source if identity else None) or "", "")
+    author  = _verdict_source_label(identity.verdict_source if identity else None)
     author_cell = author
     if vd_at:
         author_cell += f"\n({vd_at})"
