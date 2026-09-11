@@ -24,7 +24,12 @@ from swb_cli.swbmeta import (
 )
 
 from swb_cli.sarif.parser import parse_sarif
-from swb_cli.code import extract_snippet, read_source_lines, resolve_under_root
+from swb_cli.code import (
+    embedded_source_lines,
+    extract_snippet,
+    read_source_lines,
+    resolve_under_root,
+)
 from swb_cli.fingerprints import (
     IdentitySource,
     assign_swb_ids,
@@ -106,6 +111,7 @@ def enrich(args) -> int:
         tool_version=first_run.tool.version if first_run else None,
         repo_root=repo_root,
         no_git=args.no_git,
+        project=getattr(args, "project", None),
     )
 
     context_policy = ContextPolicy(
@@ -147,6 +153,41 @@ def enrich(args) -> int:
         out_path, len(findings), skipped_no_locations,
     )
     return 0
+
+
+def _embedded_lines(run, loc, effective_uri: str) -> list[str] | None:
+    """The file's text from `run.artifacts[]`, when the tool embedded it.
+
+    The result addresses its artifact by index; uri matching is the fallback
+    for tools that omit the index. Both the raw uri and the uriBaseId-resolved
+    one are tried, because `artifacts[].location.uri` is written in whichever
+    form the tool used in its results.
+    """
+    artifacts = getattr(run, "artifacts", None)
+    if not artifacts:
+        return None
+
+    index = loc.artifact_index
+    artifact = None
+    if index is not None and 0 <= index < len(artifacts):
+        artifact = artifacts[index]
+    else:
+        wanted = {loc.uri, effective_uri} - {""}
+        artifact = next((a for a in artifacts if a.uri in wanted), None)
+
+    if artifact is None or artifact.contents is None:
+        return None
+
+    lines = embedded_source_lines(artifact.uri or effective_uri, artifact.contents)
+    if lines is not None:
+        # The disk read above has already logged a warning naming the file it
+        # could not open; without this line the log would claim the snippet
+        # was skipped when it was not.
+        logger.info(
+            "uri %r not readable from disk; using the contents embedded in the report",
+            effective_uri,
+        )
+    return lines
 
 
 def _build_findings(
@@ -193,10 +234,16 @@ def _build_findings(
                 if source_root and effective_uri
                 else None
             )
+            if source_lines is None:
+                # Nothing on disk — the report may carry the file itself.
+                # Disk wins when both exist: it is the tree the user is
+                # looking at, while the embedded copy is a snapshot of
+                # whatever the analyzer built.
+                source_lines = _embedded_lines(run, loc, effective_uri)
 
             code = None
             git = None
-            if source_root:
+            if source_lines is not None or source_root:
                 code = extract_snippet(
                     source_root,
                     effective_uri,
@@ -204,9 +251,10 @@ def _build_findings(
                     loc.region.end_line,
                     context_policy,
                     context_lines,
+                    lines=source_lines,
                 )
-                if not no_git and repo_root:
-                    git = _get_git_info(repo_root, source_root, effective_uri, loc.region.start_line, loc.region.end_line)
+            if source_root and repo_root and not no_git:
+                git = _get_git_info(repo_root, source_root, effective_uri, loc.region.start_line, loc.region.end_line)
 
             fingerprints = build_fingerprints(
                 tool_name=run.tool.name,
@@ -327,8 +375,15 @@ def _build_provenance(
     tool_version: str | None,
     repo_root: Path | None,
     no_git: bool,
+    project: str | None = None,
 ) -> Provenance:
-    repo = repo_root.name if repo_root else "unknown"
+    # Имя каталога — это догадка о том, откуда запускали команду, а не о том,
+    # что сканировали: git даёт ветку и коммит, но имени репозитория не даёт.
+    # Для отчёта, выгруженного с сервера анализатора, исходников рядом нет
+    # вовсе, и без `--project` его пришлось бы класть в каталог с нужным
+    # именем. Явное указание всегда важнее выведенного.
+    explicit_name = (project or "").strip()
+    repo = explicit_name or (repo_root.name if repo_root else "unknown")
     branch = "unknown"
     commit = "0" * 40
     commit_short = "0000000"
@@ -347,6 +402,7 @@ def _build_provenance(
 
     return Provenance(
         repo=repo,
+        repo_explicit=bool(explicit_name),
         branch=branch,
         commit=commit,
         commit_short=commit_short,

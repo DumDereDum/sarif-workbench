@@ -40,6 +40,16 @@ def _add_enrich_parser(sub: argparse._SubParsersAction) -> None:
     p.add_argument("sarif", metavar="PATH", help="Path to SARIF file")
     p.add_argument("--out", metavar="PATH", help="Output path (default: <input>.swbmeta.json)")
     p.add_argument("--repo-root", metavar="PATH", help="Source tree root for git and path resolution")
+    p.add_argument(
+        "--project",
+        metavar="NAME",
+        help=(
+            "Project name. Defaults to the --repo-root directory name — which is "
+            "a guess about where the command was run, not about what was scanned. "
+            "Set it explicitly for reports exported from an analyzer server, "
+            "where no source tree is present"
+        ),
+    )
     p.add_argument("--source-root",
         help=(
             "Root directory used to resolve SARIF artifact URIs and read code "

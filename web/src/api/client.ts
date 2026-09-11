@@ -64,6 +64,7 @@ export interface RunSummary {
   id: string; commit: string; branch: string; tool: string; tool_version?: string
   scanned_at: string | null; uploaded_at: string | null
   counts: Partial<Counts>; counts_by_verdict: Partial<CountsByVerdict>
+  counts_by_fstec?: Record<string, number>
 }
 
 export interface Project {
@@ -71,6 +72,7 @@ export interface Project {
   baseline_run_id: string | null
   last_run: RunSummary | null
   counts: Partial<Counts>; counts_by_verdict: Partial<CountsByVerdict>
+  counts_by_fstec?: Record<string, number>
 }
 
 export interface Run {
@@ -78,15 +80,115 @@ export interface Run {
   commit: string; branch: string; tool: string | null; tool_version: string | null
   scanned_at: string | null; uploaded_at: string | null
   counts: Partial<Counts>; counts_by_verdict: Partial<CountsByVerdict>
+  counts_by_fstec?: Record<string, number>
   baseline_run_id: string | null
+}
+
+// Блок расчёта по методике ФСТЭК. `status`: assessed | needs_assessment |
+// not_applicable. У непосчитанной находки v/level/remediation равны null, а
+// `missing` перечисляет незаданные показатели — пустая оценка не должна
+// выглядеть как «Низкий».
+export interface FstecBlock {
+  status: string
+  v: number | null
+  level: string | null
+  level_label: string | null
+  remediation: string | null
+  missing: string[]
+  methodology: string
+  breakdown?: Record<string, unknown> | null
 }
 
 export interface FindingItem {
   id: string; swb_id: string; occurrence: number
   severity: string; rule_id: string; rule_name: string; cwe: string | null
+  security_severity: number | null; fstec: FstecBlock
   uri: string; start_line: number; scope: string | null; message: string
   verdict: string; verdict_source: string | null; lang: string | null
   fingerprint_algo?: string | null; fingerprint_level?: string | null
+}
+
+// Методика ФСТЭК от 30.06.2025. Варианты показателей и подписи уровней
+// приходят с сервера (`GET /fstec/indicators`), а не переписываются здесь:
+// это нормативные значения, и расхождение копий меняет уровень критичности
+// в отчёте для регулятора. Ровно та ошибка, от которой предостерегает
+// комментарий в lib/severity.ts, где такая копия ведётся вручную.
+export interface FstecIndicatorValue {
+  value: string; label: string; score: number; weighted: number
+}
+export interface FstecIndicator {
+  symbol: string; title: string; weight: number; values: FstecIndicatorValue[]
+}
+export interface FstecLevel {
+  key: string; label: string; remediation: string
+  min_value: number | null; min_inclusive: boolean
+}
+export interface FstecIndicators {
+  methodology: string; formula: string
+  indicators: Record<string, FstecIndicator>
+  levels: FstecLevel[]
+  // Значение E, с которым живёт находка, пока сведений об эксплуатации
+  // никто не проставил. Не пропуск, а строка таблицы 1 — форма показывает
+  // его наравне с заданными вручную.
+  exploitation_default: { value: string; label: string; reason: string }
+}
+
+// Показатель E на конкретной находке. `set_by_human: false` — умолчание;
+// выдавать его за решение специалиста нельзя, отсюда отдельный признак.
+export interface ExploitationBlock {
+  value: string
+  label: string
+  score: number
+  set_by_human: boolean
+  ref: string | null
+  by: string | null
+  at: string | null
+}
+
+export interface FstecProfile {
+  component_type: string | null
+  vulnerable_share: string | null
+  perimeter_exposure: string | null
+  missing: string[]
+  complete: boolean
+  updated_by: string | null
+  updated_at: string | null
+}
+
+// Оценка правила: показатель H и, когда анализатор не дал security-severity,
+// оценка CVSS. Хранится глобально, не на проект — последствие эксплуатации
+// не зависит от репозитория, в котором находка нашлась.
+export interface RuleImpactRow {
+  tool: string
+  rule_id: string
+  rule_name: string | null
+  cwes: string[]
+  findings: number
+  impacts: string[]
+  not_applicable: boolean
+  i_cvss: number | null
+  cvss_vector: string | null
+  note: string | null
+  updated_by: string | null
+  updated_at: string | null
+  assessed: boolean
+}
+
+export interface RuleImpactPage {
+  total: number
+  unassessed: number
+  items: RuleImpactRow[]
+}
+
+export interface RuleImpactPatch {
+  tool: string
+  rule_id: string
+  impacts?: string[]
+  not_applicable?: boolean
+  i_cvss?: number | null
+  cvss_vector?: string | null
+  note?: string | null
+  updated_by?: string | null
 }
 
 export interface FindingsPage {
@@ -116,6 +218,7 @@ export interface VerdictObj {
 
 export interface FindingDetail extends FindingItem {
   rule_description: string | null; help_uri: string | null
+  exploitation: ExploitationBlock
   end_line: number | null
   snippet: Snippet | null
   // T-39: always arrays (possibly empty), server never sends null for these.
@@ -205,8 +308,53 @@ export const api = {
       body: JSON.stringify({ verdict, rationale, version }),
     }),
 
+  // value: null возвращает находку к умолчанию. Для остальных значений
+  // сервер требует ссылку на источник и отвечает 400 без неё.
+  setExploitation: (
+    fid: string,
+    value: string | null,
+    ref: string,
+  ): Promise<{ exploitation: ExploitationBlock; fstec: FstecBlock }> =>
+    req(`/findings/${fid}/exploitation`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value, ref }),
+    }),
+
   resetVerdicts: (runId: string): Promise<{ reset: number }> =>
     req(`/runs/${runId}/reset`, { method: 'POST' }),
+
+  fstecIndicators: (): Promise<FstecIndicators> => req('/fstec/indicators'),
+
+  ruleImpacts: (params: { unassessed?: boolean; tool?: string } = {}): Promise<RuleImpactPage> => {
+    const qs = new URLSearchParams()
+    if (params.unassessed) qs.set('unassessed', 'true')
+    if (params.tool) qs.set('tool', params.tool)
+    const q = qs.toString()
+    return req(`/fstec/rule-impacts${q ? `?${q}` : ''}`)
+  },
+
+  // Ключ (tool, rule_id) едет в теле: идентификаторы правил содержат слэши,
+  // названия инструментов — пробелы, и путь пришлось бы кодировать.
+  setRuleImpact: (patch: RuleImpactPatch): Promise<{ saved: number; recomputed: Record<string, number> }> =>
+    req('/fstec/rule-impacts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+
+  fstecProfile: (projectId: string): Promise<FstecProfile> =>
+    req(`/projects/${projectId}/fstec-profile`),
+
+  setFstecProfile: (
+    projectId: string,
+    patch: Partial<Record<'component_type' | 'vulnerable_share' | 'perimeter_exposure', string | null>>,
+  ): Promise<FstecProfile & { recomputed: Record<string, number> }> =>
+    req(`/projects/${projectId}/fstec-profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
 }
 
 export function normalizeDetail(raw: Record<string, unknown>): FindingDetail {

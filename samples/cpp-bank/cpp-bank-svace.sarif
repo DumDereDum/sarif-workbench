@@ -1,0 +1,2220 @@
+{
+    "properties": {
+        "artifacts_count": 1,
+        "branch_id": "038aa8da-0dd3-495d-9dff-8bc225cbcc88",
+        "branch_name": "master",
+        "checkers_config_id": "761cdb46-5413-439f-b5cb-6636eb7cf71a",
+        "checkers_config_name": "Svace version 4.x",
+        "checkers_config_version": "Svace version 4.0.251120 (git rev e036810dba58591978fb0b3f0d1a066b62002152 2025-09-30 16:21:58 +0300)",
+        "project_id": "1d4103d9-cff6-4ad7-81ce-1758dc9e15e1",
+        "project_name": "cpp-bank",
+        "snapshot_id": "aaf34cd5-dde3-40c1-b293-dc22677a77bf",
+        "snapshot_name": "Snapshot 2026-09-09 14:50:42 +0300",
+        "warnings_count": 15
+    },
+    "version": "2.1.0",
+    "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+    "runs": [
+        {
+            "tool": {
+                "driver": {
+                    "informationUri": "https://svacer.ispras.ru/mediawiki",
+                    "name": "Svacer",
+                    "rules": [
+                        {
+                            "properties": {
+                                "cwe": [
+                                    {
+                                        "description": "The product copies an input buffer to an output buffer without verifying that the size of the input buffer is less than the size of the output buffer, leading to a buffer overflow.",
+                                        "name": "120"
+                                    },
+                                    {
+                                        "description": "A stack-based buffer overflow condition is a condition where the buffer being overwritten is allocated on the stack (i.e., is a local variable or, rarely, a parameter to a function).",
+                                        "name": "121"
+                                    },
+                                    {
+                                        "description": "A heap overflow condition is a buffer overflow, where the buffer that can be overwritten is allocated in the heap portion of memory, generally meaning that the buffer was allocated using a routine such as malloc().",
+                                        "name": "122"
+                                    },
+                                    {
+                                        "description": "The product writes to a buffer using an index or pointer that references a memory location prior to the beginning of the buffer.",
+                                        "name": "124"
+                                    },
+                                    {
+                                        "description": "The product uses a function that accepts a format string as an argument, but the format string originates from an external source.",
+                                        "name": "134"
+                                    },
+                                    {
+                                        "description": "The product receives input or data, but it does\n        not validate or incorrectly validates that the input has the\n        properties that are required to process the data safely and\n        correctly.",
+                                        "name": "20"
+                                    }
+                                ],
+                                "lang": "CXX",
+                                "mtid": "SvEng.BO.21",
+                                "origin": "builtin",
+                                "reliability": "Unknown",
+                                "severity": "Critical",
+                                "svacer_checker_id": "BUFFER_OVERFLOW.SPRINTF",
+                                "tool": "SvEng",
+                                "warnClass": "BUFFER_OVERFLOW.SPRINTF"
+                            },
+                            "id": "SvEng.CXX.BUFFER_OVERFLOW.SPRINTF/SvEng.BO.21",
+                            "name": "BUFFER_OVERFLOW.SPRINTF",
+                            "shortDescription": {
+                                "text": "BUFFER_OVERFLOW.SPRINTF"
+                            }
+                        },
+                        {
+                            "properties": {
+                                "cwe": [
+                                    {
+                                        "description": "The product calls a function that can never be guaranteed to work safely.",
+                                        "name": "242"
+                                    }
+                                ],
+                                "lang": "CXX",
+                                "mtid": "SvEng.L.1",
+                                "origin": "builtin",
+                                "reliability": "High",
+                                "severity": "Minor",
+                                "svacer_checker_id": "PROC_USE.VULNERABLE",
+                                "tool": "SvEng",
+                                "warnClass": "PROC_USE.VULNERABLE"
+                            },
+                            "id": "SvEng.CXX.PROC_USE.VULNERABLE/SvEng.L.1",
+                            "name": "PROC_USE.VULNERABLE",
+                            "shortDescription": {
+                                "text": "PROC_USE.VULNERABLE"
+                            }
+                        },
+                        {
+                            "properties": {
+                                "cwe": [
+                                    {
+                                        "description": "The product copies an input buffer to an output buffer without verifying that the size of the input buffer is less than the size of the output buffer, leading to a buffer overflow.",
+                                        "name": "120"
+                                    },
+                                    {
+                                        "description": "The product does not terminate or incorrectly terminates a string or array with a null character or equivalent terminator.",
+                                        "name": "170"
+                                    }
+                                ],
+                                "lang": "CXX",
+                                "mtid": "SvEng.T.17",
+                                "origin": "builtin",
+                                "reliability": "Average",
+                                "severity": "Critical",
+                                "svacer_checker_id": "TAINTED.NONTERMINATED_STRING",
+                                "tool": "SvEng",
+                                "warnClass": "TAINTED.NONTERMINATED_STRING"
+                            },
+                            "id": "SvEng.CXX.TAINTED.NONTERMINATED_STRING/SvEng.T.17",
+                            "name": "TAINTED.NONTERMINATED_STRING",
+                            "shortDescription": {
+                                "text": "TAINTED.NONTERMINATED_STRING"
+                            }
+                        },
+                        {
+                            "properties": {
+                                "lang": "CXX",
+                                "mtid": "SvEng.BO.21",
+                                "origin": "builtin",
+                                "reliability": "Unknown",
+                                "severity": "Critical",
+                                "svacer_checker_id": "TAINTED.SPRINTF",
+                                "tool": "SvEng",
+                                "warnClass": "TAINTED.SPRINTF"
+                            },
+                            "id": "SvEng.CXX.TAINTED.SPRINTF/SvEng.BO.21",
+                            "name": "TAINTED.SPRINTF",
+                            "shortDescription": {
+                                "text": "TAINTED.SPRINTF"
+                            }
+                        },
+                        {
+                            "properties": {
+                                "cwe": [
+                                    {
+                                        "description": "The product copies an input buffer to an output buffer without verifying that the size of the input buffer is less than the size of the output buffer, leading to a buffer overflow.",
+                                        "name": "120"
+                                    },
+                                    {
+                                        "description": "The product receives input or data, but it does\n        not validate or incorrectly validates that the input has the\n        properties that are required to process the data safely and\n        correctly.",
+                                        "name": "20"
+                                    }
+                                ],
+                                "lang": "CXX",
+                                "mtid": "SvEng.T.1",
+                                "origin": "builtin",
+                                "reliability": "VeryHigh",
+                                "severity": "Critical",
+                                "svacer_checker_id": "TAINTED_PTR",
+                                "tool": "SvEng",
+                                "warnClass": "TAINTED_PTR"
+                            },
+                            "id": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                            "name": "TAINTED_PTR",
+                            "shortDescription": {
+                                "text": "TAINTED_PTR"
+                            }
+                        },
+                        {
+                            "properties": {
+                                "cwe": [
+                                    {
+                                        "description": "The product copies an input buffer to an output buffer without verifying that the size of the input buffer is less than the size of the output buffer, leading to a buffer overflow.",
+                                        "name": "120"
+                                    },
+                                    {
+                                        "description": "The product uses a function that accepts a format string as an argument, but the format string originates from an external source.",
+                                        "name": "134"
+                                    },
+                                    {
+                                        "description": "The product receives input or data, but it does\n        not validate or incorrectly validates that the input has the\n        properties that are required to process the data safely and\n        correctly.",
+                                        "name": "20"
+                                    }
+                                ],
+                                "lang": "CXX",
+                                "mtid": "SvEng.BO.45",
+                                "origin": "builtin",
+                                "reliability": "High",
+                                "severity": "Critical",
+                                "svacer_checker_id": "TAINTED_PTR.FORMAT_STRING",
+                                "tool": "SvEng",
+                                "warnClass": "TAINTED_PTR.FORMAT_STRING"
+                            },
+                            "id": "SvEng.CXX.TAINTED_PTR.FORMAT_STRING/SvEng.BO.45",
+                            "name": "TAINTED_PTR.FORMAT_STRING",
+                            "shortDescription": {
+                                "text": "TAINTED_PTR.FORMAT_STRING"
+                            }
+                        }
+                    ],
+                    "version": "12-0-0.2025-11-26@06:01:04.d9e6bb80"
+                }
+            },
+            "artifacts": [
+                {
+                    "location": {
+                        "uri": "/.build/main.cpp"
+                    },
+                    "length": 4788,
+                    "contents": {
+                        "text": "/*\n * VULNERABLE BANK APP — intentionally insecure, for semgrep benchmarking.\n * DO NOT USE IN PRODUCTION.\n *\n * Vulnerabilities planted:\n *   CWE-121  Stack buffer overflow via gets()\n *   CWE-676  Use of dangerous function strcpy / sprintf without bounds\n *   CWE-134  Uncontrolled format string\n *   CWE-89   SQL injection (simulated query building)\n *   CWE-78   OS command injection via system()\n *   CWE-798  Hard-coded credentials\n *   CWE-190  Integer overflow in balance arithmetic\n *   CWE-476  NULL pointer dereference after malloc\n *   CWE-401  Memory leak (malloc without free)\n */\n\n#include \u003ccstdio\u003e\n#include \u003ccstdlib\u003e\n#include \u003ccstring\u003e\n#include \u003ciostream\u003e\n#include \u003cstring\u003e\n\n// CWE-798: hard-coded credentials\nstatic const char* ADMIN_PASSWORD = \"admin123\";\nstatic const char* DB_CONNECTION  = \"host=prod-db user=root password=SuperSecret99\";\n\nstruct Account {\n    int    id;\n    char   owner[64];\n    double balance;\n};\n\n// ── auth ──────────────────────────────────────────────────────────────────────\n\nbool authenticate(const char* username, const char* password) {\n    char buf[32];\n    // CWE-676 / CWE-121: strcpy into fixed-size buffer, no bounds check\n    strcpy(buf, username);\n\n    // CWE-798: compare against literal secret\n    if (strcmp(password, ADMIN_PASSWORD) == 0) {\n        return true;\n    }\n\n    // CWE-89: SQL injection — user input concatenated directly into query string\n    char query[256];\n    sprintf(query,\n            \"SELECT * FROM users WHERE name='%s' AND pass='%s'\",\n            username, password);\n    printf(\"[DB] %s\\n\", query);\n\n    return false;\n}\n\n// ── account ops ───────────────────────────────────────────────────────────────\n\nAccount* create_account(int id, const char* owner_name) {\n    // CWE-401: malloc result used, but never freed in error path\n    Account* acc = (Account*)malloc(sizeof(Account));\n\n    // CWE-476: malloc result not checked before use\n    acc-\u003eid      = id;\n    acc-\u003ebalance = 0.0;\n\n    // CWE-676: strcpy without bounds check into acc-\u003eowner[64]\n    strcpy(acc-\u003eowner, owner_name);\n\n    return acc;\n}\n\nvoid deposit(Account* acc, int amount) {\n    // CWE-190: signed integer overflow — no check before addition\n    acc-\u003ebalance += amount;\n    printf(\"Deposited %d. New balance: %.2f\\n\", amount, acc-\u003ebalance);\n}\n\nvoid print_account(Account* acc) {\n    char msg[128];\n    // CWE-676: sprintf into fixed buffer without length check\n    sprintf(msg, \"Account #%d | Owner: %s | Balance: %.2f\",\n            acc-\u003eid, acc-\u003eowner, acc-\u003ebalance);\n    puts(msg);\n}\n\n// ── reporting ─────────────────────────────────────────────────────────────────\n\nvoid export_report(const char* filename) {\n    char cmd[256];\n    // CWE-78: OS command injection — filename comes from user, passed to system()\n    sprintf(cmd, \"cat /var/bank/reports/%s\", filename);\n    system(cmd);\n}\n\nvoid log_event(const char* user_message) {\n    // CWE-134: uncontrolled format string — user_message used as format directly\n    printf(user_message);\n}\n\n// ── input ─────────────────────────────────────────────────────────────────────\n\nvoid read_username(char* out) {\n    printf(\"Username: \");\n    // CWE-121: gets() — classic unbounded stack buffer overflow\n    gets(out);\n}\n\n// ── main ──────────────────────────────────────────────────────────────────────\n\nint main() {\n    char username[64];\n    char password[64];\n    char report_name[128];\n\n    printf(\"=== Vulnerable Bank v1.0 ===\\n\");\n    printf(\"DB: %s\\n\", DB_CONNECTION);   // leaks credentials to stdout\n\n    read_username(username);\n\n    printf(\"Password: \");\n    gets(password);  // CWE-121: second gets() call\n\n    if (!authenticate(username, password)) {\n        printf(\"Access denied.\\n\");\n        return 1;\n    }\n\n    Account* acc = create_account(1001, username);\n    deposit(acc, 500);\n    print_account(acc);\n\n    printf(\"Report file to view: \");\n    gets(report_name);   // CWE-121: third gets() call, fed into system()\n    export_report(report_name);\n\n    log_event(username); // CWE-134: username as format string\n\n    // CWE-401: acc is never freed\n    return 0;\n}\n"
+                    }
+                }
+            ],
+            "results": [
+                {
+                    "properties": {
+                        "checker_reliability": "Unknown",
+                        "checker_severity": "Critical",
+                        "details": "0cfc954064d956f488cd28e9547d93d6c75817d3",
+                        "invariant": "WGPgf7dgcJTf5+v+L04i7w",
+                        "lang": "CXX",
+                        "mtid": "SvEng.BO.21",
+                        "origFunc": "export_report",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "BUFFER_OVERFLOW.SPRINTF"
+                    },
+                    "ruleId": "SvEng.CXX.BUFFER_OVERFLOW.SPRINTF/SvEng.BO.21",
+                    "ruleIndex": 0,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "An element of array '\u0026cmd[0]' of size 256, declared at main.cpp:88, is accessed by an index with values in [0, +inf] at main.cpp:90, which may lead to a buffer overflow. Details: Format string: 'Optional[cat /var/bank/reports/%s]'.Filled values can have unlimited string length."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 90,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z13export_reportPKc",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "WGPgf7dgcJTf5+v+L04i7w"
+                    },
+                    "partialFingerprints": {
+                        "details": "0cfc954064d956f488cd28e9547d93d6c75817d3"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "buffer overflow"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 90,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "buffer overflow"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "buffer overflow"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "declaration"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 88,
+                                                        "startColumn": 1
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition '\u0026cmd'"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "declaration"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "Unknown",
+                        "checker_severity": "Critical",
+                        "details": "1f651b7f2a0774288946cef1f61851ee6e725074",
+                        "invariant": "QA9B4D8FazmO3v59VIzCAQ",
+                        "lang": "CXX",
+                        "mtid": "SvEng.BO.21",
+                        "origFunc": "authenticate",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "BUFFER_OVERFLOW.SPRINTF"
+                    },
+                    "ruleId": "SvEng.CXX.BUFFER_OVERFLOW.SPRINTF/SvEng.BO.21",
+                    "ruleIndex": 0,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "An element of array '\u0026query[0]' of size 256, declared at main.cpp:46, is accessed by an index with values in [0, +inf] at main.cpp:47, which may lead to a buffer overflow. Details: Format string: 'Optional[SELECT * FROM users WHERE name='%s' AND pass='%s']'.Filled values can have unlimited string length."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 47,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z12authenticatePKcS0_",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "QA9B4D8FazmO3v59VIzCAQ"
+                    },
+                    "partialFingerprints": {
+                        "details": "1f651b7f2a0774288946cef1f61851ee6e725074"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "buffer overflow"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 47,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "buffer overflow"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "buffer overflow"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "declaration"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 46,
+                                                        "startColumn": 1
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition '\u0026query'"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "declaration"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "High",
+                        "checker_severity": "Minor",
+                        "details": "7f6bcc5509176c899e904ecbb6f9b3c7e2f3ec43",
+                        "invariant": "bPSccCFoYTwh+xvXrWri6A",
+                        "lang": "CXX",
+                        "mtid": "SvEng.L.1",
+                        "origFunc": "read_username",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "PROC_USE.VULNERABLE"
+                    },
+                    "ruleId": "SvEng.CXX.PROC_USE.VULNERABLE/SvEng.L.1",
+                    "ruleIndex": 1,
+                    "kind": "fail",
+                    "level": "note",
+                    "message": {
+                        "text": "Use of vulnerable function 'gets' at main.cpp:104. This function doesn't check input buffer capacity, allowing the possibility of buffer overflow."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 104,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z13read_usernamePc",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "bPSccCFoYTwh+xvXrWri6A"
+                    },
+                    "partialFingerprints": {
+                        "details": "7f6bcc5509176c899e904ecbb6f9b3c7e2f3ec43"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "function call"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 104,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "function call"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "function call"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "High",
+                        "checker_severity": "Minor",
+                        "details": "7f6bcc5509176c899e904ecbb6f9b3c7e2f3ec43",
+                        "invariant": "vuHj4JlbsvhwvCDaleplrA",
+                        "lang": "CXX",
+                        "mtid": "SvEng.L.1",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "PROC_USE.VULNERABLE"
+                    },
+                    "ruleId": "SvEng.CXX.PROC_USE.VULNERABLE/SvEng.L.1",
+                    "ruleIndex": 1,
+                    "kind": "fail",
+                    "level": "note",
+                    "message": {
+                        "text": "Use of vulnerable function 'gets' at main.cpp:120. This function doesn't check input buffer capacity, allowing the possibility of buffer overflow."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 120,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "vuHj4JlbsvhwvCDaleplrA"
+                    },
+                    "partialFingerprints": {
+                        "details": "7f6bcc5509176c899e904ecbb6f9b3c7e2f3ec43"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "function call"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 120,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "function call"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 132,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "function call"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "function call"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "High",
+                        "checker_severity": "Minor",
+                        "details": "b043c5a63bf9d432c816f2cb421c907fe912bf16",
+                        "invariant": "SNLwLG5xVtTvxiovPVWcyQ",
+                        "lang": "CXX",
+                        "mtid": "SvEng.L.1",
+                        "origFunc": "authenticate",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "PROC_USE.VULNERABLE"
+                    },
+                    "ruleId": "SvEng.CXX.PROC_USE.VULNERABLE/SvEng.L.1",
+                    "ruleIndex": 1,
+                    "kind": "fail",
+                    "level": "note",
+                    "message": {
+                        "text": "Use of vulnerable function 'strcpy' at main.cpp:38. This function is unsafe, use strncpy instead."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 38,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z12authenticatePKcS0_",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "SNLwLG5xVtTvxiovPVWcyQ"
+                    },
+                    "partialFingerprints": {
+                        "details": "b043c5a63bf9d432c816f2cb421c907fe912bf16"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "function call"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 38,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "function call"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "function call"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "High",
+                        "checker_severity": "Minor",
+                        "details": "b043c5a63bf9d432c816f2cb421c907fe912bf16",
+                        "invariant": "ROWzR8TYbDaB1R2mtuZ8uw",
+                        "lang": "CXX",
+                        "mtid": "SvEng.L.1",
+                        "origFunc": "create_account",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "PROC_USE.VULNERABLE"
+                    },
+                    "ruleId": "SvEng.CXX.PROC_USE.VULNERABLE/SvEng.L.1",
+                    "ruleIndex": 1,
+                    "kind": "fail",
+                    "level": "note",
+                    "message": {
+                        "text": "Use of vulnerable function 'strcpy' at main.cpp:66. This function is unsafe, use strncpy instead."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 66,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z14create_accountiPKc",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "ROWzR8TYbDaB1R2mtuZ8uw"
+                    },
+                    "partialFingerprints": {
+                        "details": "b043c5a63bf9d432c816f2cb421c907fe912bf16"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "function call"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 66,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "function call"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "function call"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "Average",
+                        "checker_severity": "Critical",
+                        "details": "ee25aa3cba85a54963da526a1cfd8d8e74c679b7",
+                        "invariant": "PlY9lu45V/+9hKgSJrtA/A",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.17",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED.NONTERMINATED_STRING"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED.NONTERMINATED_STRING/SvEng.T.17",
+                    "ruleIndex": 2,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "Copying from tainted string 'username' to 'acc-\u003eowner' at main.cpp:127 may form a non-null-terminated C string of unknown size."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 127,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "PlY9lu45V/+9hKgSJrtA/A"
+                    },
+                    "partialFingerprints": {
+                        "details": "ee25aa3cba85a54963da526a1cfd8d8e74c679b7"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 127,
+                                                        "startColumn": 20
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Operation"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 104,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'out' is passed to function 'gets' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 101,
+                                                        "startColumn": 26
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'read_username'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 117,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'read_username' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "Unknown",
+                        "checker_severity": "Critical",
+                        "details": "0cfc954064d956f488cd28e9547d93d6c75817d3",
+                        "invariant": "NgfHpZQE47OvphIjGfJmjQ",
+                        "lang": "CXX",
+                        "mtid": "SvEng.BO.21",
+                        "origFunc": "export_report",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED.SPRINTF"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED.SPRINTF/SvEng.BO.21",
+                    "ruleIndex": 3,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "An element of array '\u0026cmd[0]' of size 256, declared at main.cpp:88, is accessed by an index with values in [0, +inf] at main.cpp:90, which may lead to a buffer overflow. Tainted source at main.cpp:87. Details: Format string: 'Optional[cat /var/bank/reports/%s]'.Filled values can have unlimited string length."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 90,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z13export_reportPKc",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "NgfHpZQE47OvphIjGfJmjQ"
+                    },
+                    "partialFingerprints": {
+                        "details": "0cfc954064d956f488cd28e9547d93d6c75817d3"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "buffer overflow"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 90,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "buffer overflow"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "buffer overflow"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "declaration"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 88,
+                                                        "startColumn": 1
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition '\u0026cmd'"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "declaration"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 87,
+                                                        "startColumn": 32
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Parameter 'filename' of function 'export_report' is tainted"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 133,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "call"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 132,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "'\u0026report_name[0]' is tainted"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "VeryHigh",
+                        "checker_severity": "Critical",
+                        "details": "b09e6e728eab9797ab758ed80f1a0eb24b941465",
+                        "invariant": "Ls9avykdkefVCpYRZbTXDQ",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.1",
+                        "origFunc": "export_report",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                    "ruleIndex": 4,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "Variable 'filename' is obtained from an untrusted source at main.cpp:87. The variable is used in a vulnerable operation at main.cpp:90. Please double check if input string is properly validated in error-prone manner"
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 90,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z13export_reportPKc",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "Ls9avykdkefVCpYRZbTXDQ"
+                    },
+                    "partialFingerprints": {
+                        "details": "b09e6e728eab9797ab758ed80f1a0eb24b941465"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "vulnerable operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 90,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Format string"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "vulnerable operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 87,
+                                                        "startColumn": 32
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Parameter 'filename' of function 'export_report' is tainted"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 133,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "call"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 132,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "'\u0026report_name[0]' is tainted"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "VeryHigh",
+                        "checker_severity": "Critical",
+                        "details": "ee74c13a5e1e4a4e96957694a4dfcad41e1fb8ad",
+                        "invariant": "WXvDWLSjrDVXE5n7XTyaqg",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.1",
+                        "origFunc": "export_report",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                    "ruleIndex": 4,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "Variable 'cmd[0]' is obtained from an untrusted source at main.cpp:90. The variable is used in a vulnerable operation at main.cpp:91 by calling function 'system'. Please double check if input string is properly validated in error-prone manner"
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 91,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "_Z13export_reportPKc",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "WXvDWLSjrDVXE5n7XTyaqg"
+                    },
+                    "partialFingerprints": {
+                        "details": "ee74c13a5e1e4a4e96957694a4dfcad41e1fb8ad"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "vulnerable operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 91,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026cmd[0]' is passed to function 'system' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "vulnerable operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 90,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Taint transferred from 'filename' to '\u0026cmd[0]' by 'snprintf or similar function'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 87,
+                                                        "startColumn": 32
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Parameter 'filename' of function 'export_report' is tainted"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 133,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "call"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 132,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "'\u0026report_name[0]' is tainted"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "VeryHigh",
+                        "checker_severity": "Critical",
+                        "details": "5e738906dca6935b8313b3bfe7650eac144bed8c",
+                        "invariant": "GWTtduBhzqMRIyJHt/RYug",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.1",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                    "ruleIndex": 4,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "Variable 'acc-\u003eowner' is obtained from an untrusted source at main.cpp:127. The variable is used in a vulnerable operation at main.cpp:129 by calling function 'print_account'. Please double check if input string is properly validated in error-prone manner"
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 129,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "GWTtduBhzqMRIyJHt/RYug"
+                    },
+                    "partialFingerprints": {
+                        "details": "5e738906dca6935b8313b3bfe7650eac144bed8c"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "vulnerable operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 129,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Call of 'print_account'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 77,
+                                                        "startColumn": 29
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'print_account'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 80,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Format string without width limiter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "vulnerable operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 127,
+                                                        "startColumn": 20
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'acc' gets tainted value by Copy  value from variable 'username'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 117,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'read_username' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 101,
+                                                        "startColumn": 26
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'read_username'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 104,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'out' is passed to function 'gets' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "VeryHigh",
+                        "checker_severity": "Critical",
+                        "details": "2a66c87ee94130597723529f907371a4770591c3",
+                        "invariant": "G13O9tuV3Aw88ofX8awdWQ",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.1",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                    "ruleIndex": 4,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "Variable 'report_name[0]' is obtained from an untrusted source at main.cpp:132 by calling function 'gets'. The variable is used in a vulnerable operation at main.cpp:90 by passing as 1st parameter to function 'export_report' at main.cpp:133. Please double check if input string is properly validated in error-prone manner"
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 133,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "G13O9tuV3Aw88ofX8awdWQ"
+                    },
+                    "partialFingerprints": {
+                        "details": "2a66c87ee94130597723529f907371a4770591c3"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "vulnerable operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 133,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026report_name[0]' is passed to function 'export_report' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 87,
+                                                        "startColumn": 32
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'export_report'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 90,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Format string without width limiter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "vulnerable operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 132,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026report_name[0]' is passed to function 'gets' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "VeryHigh",
+                        "checker_severity": "Critical",
+                        "details": "ae6e049e27980bf2c82abb4a225d6f1c7f5a97ed",
+                        "invariant": "hc4Klc+R/4VRM3xW5+iqgA",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.1",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                    "ruleIndex": 4,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "String variable 'username[0]' is obtained from an untrusted source at main.cpp:104 by passing as 1st parameter to function 'read_username' at main.cpp:117 and has its content copied to another string at main.cpp:38 by passing as 1st parameter to function 'authenticate' at main.cpp:122. This may lead to unexpected behavior because length of the string from untrusted source is unknown."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 122,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "hc4Klc+R/4VRM3xW5+iqgA"
+                    },
+                    "partialFingerprints": {
+                        "details": "ae6e049e27980bf2c82abb4a225d6f1c7f5a97ed"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "vulnerable operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 122,
+                                                        "startColumn": 10
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'authenticate' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 35,
+                                                        "startColumn": 31
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'authenticate'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 38,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'username' is passed to function 'strcpy' as 2nd parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "vulnerable operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 117,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'read_username' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 101,
+                                                        "startColumn": 26
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'read_username'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 104,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'out' is passed to function 'gets' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "VeryHigh",
+                        "checker_severity": "Critical",
+                        "details": "ee9f2946bf7e06421d313275e3cb484ce1adb0ba",
+                        "invariant": "G3zSINIBXdrigU5ljsQQaQ",
+                        "lang": "CXX",
+                        "mtid": "SvEng.T.1",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR/SvEng.T.1",
+                    "ruleIndex": 4,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "String variable 'username[0]' is obtained from an untrusted source at main.cpp:104 by passing as 1st parameter to function 'read_username' at main.cpp:117 and has its content copied to another string at main.cpp:66 by passing as 2nd parameter to function 'create_account' at main.cpp:127. This may lead to unexpected behavior because length of the string from untrusted source is unknown."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 127,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "G3zSINIBXdrigU5ljsQQaQ"
+                    },
+                    "partialFingerprints": {
+                        "details": "ee9f2946bf7e06421d313275e3cb484ce1adb0ba"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "vulnerable operation"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 127,
+                                                        "startColumn": 20
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'create_account' as 2nd parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 57,
+                                                        "startColumn": 29
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'create_account'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 66,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'owner_name' is passed to function 'strcpy' as 2nd parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "vulnerable operation"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "tainted pointer"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 117,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'read_username' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 101,
+                                                        "startColumn": 26
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'read_username'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 104,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'out' is passed to function 'gets' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "tainted pointer"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "properties": {
+                        "checker_reliability": "High",
+                        "checker_severity": "Critical",
+                        "details": "d9ff1759f704d66fae970dff28d5f720a329b952",
+                        "invariant": "u10utbk8KUhzKwi4mYFuxg",
+                        "lang": "CXX",
+                        "mtid": "SvEng.BO.45",
+                        "origFunc": "main",
+                        "tags": null,
+                        "tool": "SvEng",
+                        "warnClass": "TAINTED_PTR.FORMAT_STRING"
+                    },
+                    "ruleId": "SvEng.CXX.TAINTED_PTR.FORMAT_STRING/SvEng.BO.45",
+                    "ruleIndex": 5,
+                    "kind": "fail",
+                    "level": "error",
+                    "message": {
+                        "text": "Vulnerable format string '\u0026username[0]', received from an external source at main.cpp:104 by passing as 1st parameter to function 'read_username' at main.cpp:117, is used as a format string parameter at main.cpp:96 by passing as 1st parameter to function 'log_event' at main.cpp:135. This vulnerability may be used in a format string attack."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": "/.build/main.cpp",
+                                    "index": 0
+                                },
+                                "region": {
+                                    "startLine": 135,
+                                    "sourceLanguage": "CXX"
+                                }
+                            },
+                            "logicalLocations": [
+                                {
+                                    "fullyQualifiedName": "main",
+                                    "kind": "function"
+                                }
+                            ]
+                        }
+                    ],
+                    "fingerprints": {
+                        "invariant": "u10utbk8KUhzKwi4mYFuxg"
+                    },
+                    "partialFingerprints": {
+                        "details": "d9ff1759f704d66fae970dff28d5f720a329b952"
+                    },
+                    "codeFlows": [
+                        {
+                            "message": {
+                                "text": "use"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 135,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'log_event' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 94,
+                                                        "startColumn": 28
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'log_event'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 96,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'user_message' is passed to function 'printf' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "use"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "message": {
+                                "text": "format string"
+                            },
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 117,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable '\u0026username[0]' is passed to function 'read_username' as 1st parameter"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 101,
+                                                        "startColumn": 26
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Definition of 'read_username'"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "physicalLocation": {
+                                                    "artifactLocation": {
+                                                        "uri": "/.build/main.cpp"
+                                                    },
+                                                    "region": {
+                                                        "startLine": 104,
+                                                        "startColumn": 5
+                                                    }
+                                                },
+                                                "message": {
+                                                    "text": "Variable 'out' is passed to function 'gets' as 1st parameter"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "message": {
+                                        "text": "format string"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

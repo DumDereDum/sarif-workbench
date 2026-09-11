@@ -18,10 +18,12 @@ def _run_to_dict(r: Run) -> dict:
         "branch": r.branch,
         "tool": r.tool,
         "tool_version": r.tool_version,
+        "analyzer_config": r.analyzer_config,
         "scanned_at": r.scanned_at,
         "uploaded_at": r.uploaded_at.isoformat() if r.uploaded_at else None,
         "counts": r.counts or {},
         "counts_by_verdict": r.counts_by_verdict or {},
+        "counts_by_fstec": r.counts_by_fstec or {},
     }
 
 
@@ -45,6 +47,7 @@ def list_projects(db: Session = Depends(get_db)):
             "last_run": _run_to_dict(last_run) if last_run else None,
             "counts": last_run.counts if last_run else {},
             "counts_by_verdict": last_run.counts_by_verdict if last_run else {},
+            "counts_by_fstec": last_run.counts_by_fstec if last_run else {},
         })
     return {"projects": result}
 

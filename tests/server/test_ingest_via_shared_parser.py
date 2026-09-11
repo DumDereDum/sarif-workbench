@@ -149,7 +149,7 @@ def test_cwe_extracted_from_rule_tags_via_typed_rule():
         }],
     }
     result = ingest_mod.ingest(_sarif(driver), _meta([]))
-    assert result["rules"]["hardcoded-password"]["cwe"] == "CWE-798"
+    assert result["rules"]["hardcoded-password"]["cwes"] == ["CWE-798"]
     assert result["rules"]["hardcoded-password"]["default_severity"] == "high"  # sec-sev 8.5
 
 

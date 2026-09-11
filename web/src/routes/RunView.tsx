@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type FindingItem, type AggGroup } from '../api/client'
 import { SEV_ORDER, SEV, sevStyle, sevLabel } from '../lib/severity'
 import { VD_ORDER, VERDICT, verdictStyle, verdictLabel } from '../lib/verdict'
+import { FSTEC_EXTRA, fstecColor, fstecStyle, fstecKey } from '../lib/fstec'
 import FindingDrawer from '../components/FindingDrawer'
 import AnalyzeModal from '../components/AnalyzeModal'
 import DiffView from '../components/DiffView'
@@ -19,6 +20,7 @@ const AGG_TABS = [
   { key: 'rule',     label: 'Правило' },
   { key: 'file',     label: 'Файл' },
   { key: 'cwe',      label: 'CWE' },
+  { key: 'fstec_level', label: 'Критичность ФСТЭК' },
 ] as const
 
 function SevChip({ label, count, color, bg, active, onClick }: {
@@ -38,6 +40,7 @@ function SevChip({ label, count, color, bg, active, onClick }: {
 function AggDot({ by, groupKey }: { by: string; groupKey: string }) {
   if (by === 'severity') return <span className="dot" style={{ background: SEV[groupKey as keyof typeof SEV]?.c ?? 'var(--faint)' }} />
   if (by === 'verdict') return <span className="dot" style={{ background: VERDICT[groupKey as keyof typeof VERDICT]?.c ?? 'var(--faint)' }} />
+  if (by === 'fstec_level') return <span className="dot" style={{ background: fstecColor(groupKey).c }} />
   return <span className="dot" style={{ background: 'var(--primary)' }} />
 }
 
@@ -50,6 +53,7 @@ export default function RunView() {
   const [aggValue, setAggValue] = useState<string | null>(null)
   const [sevFilter, setSevFilter] = useState<Set<string>>(new Set())
   const [vdFilter, setVdFilter] = useState<Set<string>>(new Set())
+  const [fstecFilter, setFstecFilter] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
   const [openFid, setOpenFid] = useState<string | null>(null)
   const [showAnalyze, setShowAnalyze]   = useState(false)
@@ -67,10 +71,16 @@ export default function RunView() {
     n.has(v) ? n.delete(v) : n.add(v)
     return n
   })
+  const toggleFstec = (k: string) => setFstecFilter(prev => {
+    const n = new Set(prev)
+    n.has(k) ? n.delete(k) : n.add(k)
+    return n
+  })
 
   // Build query params
   const params: Record<string, string> = { page_size: '500' }
   if (sevFilter.size) params.severity = [...sevFilter].join(',')
+  if (fstecFilter.size) params.fstec_level = [...fstecFilter].join(',')
   if (vdFilter.size) params.verdict = [...vdFilter].join(',')
   if (q) params.q = q
 
@@ -86,6 +96,12 @@ export default function RunView() {
     queryKey: ['findings', runId, params],
     queryFn: () => api.findings(runId!, params),
     enabled: !!runId,
+  })
+
+  const { data: fstecMeta } = useQuery({
+    queryKey: ['fstec-indicators'],
+    queryFn: api.fstecIndicators,
+    staleTime: Infinity, // таблицы методики не меняются в течение сессии
   })
 
   const { data: aggData } = useQuery({
@@ -161,6 +177,14 @@ export default function RunView() {
 
   const counts = runData.counts as Record<string, number> ?? {}
   const cvd = runData.counts_by_verdict as Record<string, number> ?? {}
+  const cfs = runData.counts_by_fstec ?? {}
+  // Порядок и названия уровней — с сервера: это таблица 2 методики, и
+  // держать её вторую копию в вебе значило бы завести расхождение с
+  // нормативным документом. Две группы в конце уровнями не являются.
+  const fstecOrder = [
+    ...(fstecMeta?.levels ?? []).map(l => ({ key: l.key, label: l.label })),
+    ...FSTEC_EXTRA.map(e => ({ key: e.key, label: e.label })),
+  ]
 
   const items = findingsData?.items ?? []
   let displayed = items
@@ -169,6 +193,7 @@ export default function RunView() {
   if (aggValue !== null) {
     displayed = displayed.filter(f => {
       if (aggBy === 'severity') return f.severity === aggValue
+      if (aggBy === 'fstec_level') return fstecKey(f.fstec) === aggValue
       if (aggBy === 'verdict') return f.verdict === aggValue
       if (aggBy === 'rule') return `${f.rule_id} ${f.rule_name ?? ''}`.trim() === aggValue
       if (aggBy === 'file') return f.uri === aggValue
@@ -265,6 +290,27 @@ export default function RunView() {
               bg={SEV[s].bg}
               active={sevFilter.has(s)}
               onClick={() => toggleSev(s)}
+            />
+          ))}
+        </div>
+
+        <div className="sev-summary">
+          {/* Подпись короткая намеренно: `.sum-label` шириной 62px, и
+              «Критичность ФСТЭК» в неё не влезает — длинное слово наезжает
+              на первую плитку. Полное название в подсказке, а «ФСТЭК»
+              совпадает с заголовком колонки в таблице находок. */}
+          <span className="sum-label" title="Уровень критичности по методике ФСТЭК от 30.06.2025. Отвечает на другой вопрос, чем Severity: не «с чего начать разбор», а «за какой срок положено устранить».">
+            ФСТЭК
+          </span>
+          {fstecOrder.map(({ key, label }) => (
+            <SevChip
+              key={key}
+              label={label}
+              count={cfs[key] ?? 0}
+              color={fstecColor(key).c}
+              bg={fstecColor(key).bg}
+              active={fstecFilter.has(key)}
+              onClick={() => toggleFstec(key)}
             />
           ))}
         </div>
@@ -373,6 +419,7 @@ export default function RunView() {
               <thead>
                 <tr>
                   <th>Severity</th>
+                  <th>ФСТЭК</th>
                   <th>Правило</th>
                   <th>Расположение</th>
                   <th>Функция</th>
@@ -382,7 +429,7 @@ export default function RunView() {
               </thead>
               <tbody>
                 {findingsLoading && (
-                  <tr><td colSpan={6}>
+                  <tr><td colSpan={7}>
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="sk-row">
                         <div className="skel" style={{ width: 70, height: 18 }} />
@@ -392,7 +439,7 @@ export default function RunView() {
                   </td></tr>
                 )}
                 {!findingsLoading && displayed.length === 0 && (
-                  <tr><td colSpan={6}>
+                  <tr><td colSpan={7}>
                     <div className="empty">
                       <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4">
                         <path d="M14 40c3-13 14-21 26-19" strokeLinecap="round"/>
@@ -409,6 +456,23 @@ export default function RunView() {
                       <span className="sev-tag" style={sevStyle(f.severity)}>
                         <span className="dot" style={{ background: SEV[f.severity as keyof typeof SEV]?.c ?? 'var(--note)' }} />
                         {sevLabel(f.severity)}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className="sev-tag"
+                        style={fstecStyle(fstecKey(f.fstec))}
+                        title={
+                          f.fstec.status === 'assessed'
+                            ? `V = ${f.fstec.v} · устранить ${f.fstec.remediation}`
+                            : f.fstec.missing.length
+                              ? `Не заданы показатели: ${f.fstec.missing.join(', ')}`
+                              : 'Оценивать нечего'
+                        }
+                      >
+                        {f.fstec.level_label
+                          ?? FSTEC_EXTRA.find(e => e.key === f.fstec.status)?.label
+                          ?? '—'}
                       </span>
                     </td>
                     <td>

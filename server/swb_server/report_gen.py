@@ -5,6 +5,13 @@ import html
 from datetime import datetime
 from typing import Any
 
+from swb_contract.fstec import (
+    FSTEC_LEVEL_ORDER,
+    METHODOLOGY,
+    level_for,
+    level_label,
+)
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _SEV_EN = {
@@ -46,6 +53,41 @@ _VERDICT_SOURCE_LABEL = {
     "reset":   "Сброс вердикта",
     "carried": "Перенесено при рескане",
 }
+
+
+# Уровень критичности по методике ФСТЭК от 30.06.2025. Подписи и сроки
+# берутся из контракта, а не переписываются здесь: отчёт предъявляется
+# регулятору, и расхождение копии с нормативным документом — это неверный
+# срок устранения в подписанном документе.
+_FSTEC_BG: dict[str, str] = {
+    "critical": "#b3261e",
+    "high": "#c2680a",
+    "medium": "#8a6d00",
+    "low": "#2c6e49",
+    "needs_assessment": "#5f6368",
+    "not_applicable": "#7a7a7a",
+}
+_FSTEC_EXTRA_LABEL: dict[str, str] = {
+    "needs_assessment": "Требует оценки",
+    "not_applicable": "Не применимо",
+}
+
+
+def _fstec_key(f: Any) -> str:
+    """Ключ группы: уровень у посчитанных находок, статус у остальных."""
+    status = getattr(f, "fstec_status", None) or "needs_assessment"
+    level = getattr(f, "fstec_level", None)
+    return level if status == "assessed" and level else status
+
+
+def _fstec_label(key: str) -> str:
+    return _FSTEC_EXTRA_LABEL.get(key) or (level_label(key) if key in FSTEC_LEVEL_ORDER else key)
+
+
+def _fstec_remediation(f: Any) -> str:
+    """Рекомендуемый срок устранения (п. 21) — текстом, как в методике."""
+    v = getattr(f, "fstec_v", None)
+    return level_for(v).remediation if v is not None else ""
 
 
 def _verdict_source_label(source: str | None) -> str:
@@ -295,7 +337,44 @@ body {
 
 # ── Cover ─────────────────────────────────────────────────────────────────────
 
-def _cover(run: Any, project: Any, total: int) -> str:
+def _fstec_cover_rows(findings: list[Any], project: Any) -> str:
+    """Сводка по уровням критичности и отметка о заполненности профиля ИС.
+
+    Отметка нужна регулятору не меньше самих чисел: незаполненный профиль
+    означает, что расчёт по методике не выполнялся ни для одной находки, и
+    отчёт без этой оговорки читался бы как «уязвимостей высокого уровня нет».
+    """
+    counts: dict[str, int] = {}
+    for f in findings:
+        key = _fstec_key(f)
+        counts[key] = counts.get(key, 0) + 1
+
+    parts = [
+        f"{_h(_fstec_label(key))} — {counts[key]}"
+        for key in (*FSTEC_LEVEL_ORDER, "needs_assessment", "not_applicable")
+        if counts.get(key)
+    ]
+    summary = "; ".join(parts) if parts else "—"
+
+    profile = getattr(project, "fstec_profile", None)
+    filled = bool(
+        profile
+        and profile.component_type
+        and profile.vulnerable_share
+        and profile.perimeter_exposure
+    )
+    profile_note = (
+        "заполнен" if filled
+        else "НЕ ЗАПОЛНЕН — уровень критичности не рассчитывался"
+    )
+
+    return f"""
+    <tr><td>Методика оценки</td><td>{_h(METHODOLOGY)}</td></tr>
+    <tr><td>Профиль информационной системы</td><td>{_h(profile_note)}</td></tr>
+    <tr><td>Уровни критичности</td><td>{summary}</td></tr>"""
+
+
+def _cover(run: Any, project: Any, total: int, findings: list[Any]) -> str:
     repo  = getattr(project, "repo", None) or getattr(run, "project_id", "—")
     name  = getattr(project, "name", None) or repo
     branch   = run.branch or "—"
@@ -304,6 +383,13 @@ def _cover(run: Any, project: Any, total: int) -> str:
     tool_ver = run.tool_version or ""
     uploaded = _fmt_date(run.uploaded_at.isoformat() if run.uploaded_at else None)
     scanned  = run.scanned_at or "—"
+    # Версия конфигурации анализатора — не версия драйвера: у Svacer драйвер
+    # это svacer, а сканирует Svace. Регулятору важно, чем сканировали.
+    config = getattr(run, "analyzer_config", None)
+    config_row = (
+        f"\n    <tr><td>Конфигурация анализатора</td><td>{_h(config)}</td></tr>"
+        if config else ""
+    )
 
     return f"""
 <div class="cover">
@@ -314,10 +400,10 @@ def _cover(run: Any, project: Any, total: int) -> str:
     <tr><td>Репозиторий</td><td>{_h(repo)}</td></tr>
     <tr><td>Ветка</td><td>{_h(branch)}</td></tr>
     <tr><td>Коммит</td><td>{_h(commit)}</td></tr>
-    <tr><td>Инструмент анализа</td><td>{_h(tool)}{(" " + _h(tool_ver)) if tool_ver else ""}</td></tr>
+    <tr><td>Инструмент анализа</td><td>{_h(tool)}{(" " + _h(tool_ver)) if tool_ver else ""}</td></tr>{config_row}
     <tr><td>Дата сканирования</td><td>{_h(str(scanned))}</td></tr>
     <tr><td>Дата создания отчёта</td><td>{_h(uploaded)}</td></tr>
-    <tr><td>Всего находок</td><td>{total}</td></tr>
+    <tr><td>Всего находок</td><td>{total}</td></tr>{_fstec_cover_rows(findings, project)}
   </table>
   <div class="cover-footer">SARIF Workbench · Конфиденциально · Для служебного пользования</div>
 </div>
@@ -398,6 +484,16 @@ def _finding_page(f: Any, idx: int, total: int) -> str:
     # --- heading ---
     heading = f"{idx}. {_h(f.rule_id or '—')}"
 
+    # --- уровень критичности по методике ФСТЭК ---
+    # Срок устранения (п. 21) идёт отдельной колонкой: он и есть то, ради чего
+    # уровень считается. У находки без оценки колонка пустая, а не «Низкий» —
+    # пробел в данных не должен читаться как утверждение о системе.
+    fstec_k   = _fstec_key(f)
+    fstec_lbl = _fstec_label(fstec_k)
+    fstec_bg  = _FSTEC_BG.get(fstec_k, "#5f6368")
+    fstec_rem = _fstec_remediation(f)
+    fstec_v   = f" (V={getattr(f, 'fstec_v', None)})" if getattr(f, "fstec_v", None) is not None else ""
+
     # --- кодовый блок ---
     code_rows = _code_rows(f)
     code_block = f'<div class="code-inner">{code_rows}</div>' if code_rows else ""
@@ -412,13 +508,14 @@ def _finding_page(f: Any, idx: int, total: int) -> str:
 <div class="finding">
   <div class="finding-heading">{heading}</div>
 
-  <!-- Таблица 1: Язык | Серьёзность | Надёжность | CWE -->
+  <!-- Таблица 1: Язык | Серьёзность | Критичность ФСТЭК | Срок | CWE -->
   <table class="t-meta">
     <thead>
       <tr>
         <th>Язык</th>
         <th>Серьёзность</th>
-        <th>Надёжность</th>
+        <th>Критичность ФСТЭК</th>
+        <th>Срок устранения</th>
         <th>CWE</th>
       </tr>
     </thead>
@@ -426,7 +523,8 @@ def _finding_page(f: Any, idx: int, total: int) -> str:
       <tr>
         <td>{_h(lang)}</td>
         <td>{_h(sev_lbl)}</td>
-        <td>Unknown</td>
+        <td style="background:{fstec_bg};color:#fff">{_h(fstec_lbl)}{fstec_v}</td>
+        <td>{_h(fstec_rem)}</td>
         <td>{_h(cwe)}</td>
       </tr>
     </tbody>
@@ -482,7 +580,7 @@ def _finding_page(f: Any, idx: int, total: int) -> str:
 # ── Entry points ──────────────────────────────────────────────────────────────
 
 def build_html(run: Any, project: Any, findings: list[Any]) -> str:
-    cover = _cover(run, project, len(findings))
+    cover = _cover(run, project, len(findings), findings)
     toc   = _toc(findings)
     pages = "".join(
         _finding_page(f, i, len(findings)) for i, f in enumerate(findings, 1)

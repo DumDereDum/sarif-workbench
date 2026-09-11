@@ -7,20 +7,44 @@ import re
 from pydantic import ValidationError
 
 from swb_contract.sarif.models import SarifResult, SarifRun
-from swb_contract.sarif.parser import parse_sarif_data
+from swb_contract.sarif.parser import parse_document_info, parse_sarif_data
 from swb_contract.severity import SEV_ORDER, map_severity
 from swb_contract.swbmeta import Finding as MetaFinding
 
 
-def _extract_cwe(rule_id: str, tags: list[str]) -> str | None:
-    for tag in tags:
-        m = re.match(r"(?i)cwe-(\d+)", tag)
-        if m:
-            return f"CWE-{m.group(1)}"
-    m = re.match(r"(?i)(cwe-\d+)", rule_id)
-    if m:
-        return m.group(1).upper()
-    return None
+# No two analyzers spell a CWE the same way. Measured on real reports:
+#   Semgrep  `CWE-89: Improper Neutralization ...`   (tag)
+#   CodeQL   `external/cwe/cwe-089`                  (tag)
+#   Svacer   `CWE120`                                (relationships target)
+#   Svacer   `CWE-120`                               (properties.cwe, prefixed
+#                                                     by the parser)
+# Hence a full-string search (`match` anchors at position 0 and never saw a
+# single CodeQL tag) and an OPTIONAL separator — Svacer writes none.
+_CWE_RE = re.compile(r"(?i)cwe[-_/]?(\d+)")
+
+
+def _extract_cwes(rule_id: str, cwe_refs: list[str]) -> list[str]:
+    """Every CWE of a rule, in the order the analyzer listed them.
+
+    Takes the raw references collected by the parser (`SarifRule.cwe_refs`)
+    rather than tags alone: Svacer puts none of its CWEs in tags, so a
+    tags-only reading found 0 of its 424 findings.
+
+    The number goes through `int()` so zero-padded ids collapse onto the
+    canonical form: `cwe-089` must become `CWE-89`, not `CWE-089`, or it
+    joins with nothing — neither the `?cwe=` filter, nor the `by=cwe`
+    aggregation, nor any CWE-keyed lookup.
+
+    Order is the analyzer's own and is preserved: first comes the weakness
+    the rule actually targets, the rest are related ones (CodeQL routinely
+    lists 2-5, e.g. path injection carries CWE-22/23/36/73). Callers that
+    need a single value take the first.
+    """
+    seen: dict[int, None] = {}
+    for text in (*cwe_refs, rule_id):
+        for m in _CWE_RE.finditer(text):
+            seen.setdefault(int(m.group(1)), None)
+    return [f"CWE-{n}" for n in seen]
 
 
 class MetaValidationError(ValueError):
@@ -148,7 +172,7 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
     Returns:
         {
           tool, tool_version,
-          rules: {rule_id: {name, description, help_uri, default_severity, cwe}},
+          rules: {rule_id: {name, description, help_uri, default_severity, cwes}},
           findings: [{...}],
           counts: {critical, high, medium, low, note, all},
         }
@@ -174,8 +198,9 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
                 "description": rule.full_description or "",
                 "help_uri": rule.help_uri,
                 "default_severity": map_severity(rule.security_severity, rule.default_level),
+                "default_level": rule.default_level,
                 "security_severity": rule.security_severity,
-                "cwe": _extract_cwe(rid, rule.tags),
+                "cwes": _extract_cwes(rid, rule.cwe_refs),
             }
 
     # Build SARIF results lookup: (run_idx, result_idx) -> result
@@ -210,9 +235,21 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         rule_info = rules_map.get(rule_id, {})
 
         message = sarif_result.message
-        level = sarif_result.level
-        severity = map_severity(rule_info.get("security_severity"), level)
-        cwe = rule_info.get("cwe") or _extract_cwe(rule_id, [])
+        # SARIF 2.1.0: уровень берётся с самого результата; если поля нет —
+        # с defaultConfiguration правила; и лишь затем "warning". Средний шаг
+        # раньше пропускался, из-за чего весь вывод Semgrep (он `level` на
+        # результате не пишет) схлопывался в один уровень. Последний фолбэк
+        # нужен для правил, которых нет в списке драйвера.
+        level = sarif_result.level or rule_info.get("default_level") or "warning"
+        # Собственная шкала анализатора идёт перед `level`: у Svacer четыре
+        # ступени, а в `level` их помещается три, и Major с Normal там
+        # неразличимы — 278 находок из 424 в двух отчётах.
+        severity = map_severity(
+            rule_info.get("security_severity"), level, sarif_result.tool_severity
+        )
+        # Falls back to the rule id for results whose rule is missing from
+        # the driver's rule list (some tools ship an incomplete one).
+        cwes = rule_info.get("cwes") or _extract_cwes(rule_id, [])
 
         fps = vf.fingerprints
         code = vf.code
@@ -231,7 +268,12 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
             "rule_name": rule_info.get("name", ""),
             "rule_description": rule_info.get("description", ""),
             "help_uri": rule_info.get("help_uri"),
-            "cwe": cwe,
+            # `cwe` — основной CWE (первый из перечисленных анализатором),
+            # на нём держатся фильтр и агрегация; `cwes` — все, для правила
+            # максимума п. 17 методики ФСТЭК.
+            "cwe": cwes[0] if cwes else None,
+            "cwes": cwes,
+            "security_severity": rule_info.get("security_severity"),
             "severity": severity,
             "message": message,
             "uri": uri,
@@ -255,6 +297,11 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         })
 
     return {
+        # Сведения о прогоне из property bag документа: имя проекта, ветка,
+        # снимок, версия конфигурации анализатора. Нужны там, где их не дал
+        # CLI, — например у отчётов Svacer, выгруженных с сервера анализатора
+        # без доступа к исходникам.
+        "document": parse_document_info(sarif),
         "tool": tool_name,
         "tool_version": tool_version,
         "rules": rules_map,

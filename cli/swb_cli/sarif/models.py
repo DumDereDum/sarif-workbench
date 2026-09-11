@@ -8,6 +8,7 @@ keep working unchanged.
 from __future__ import annotations
 
 from swb_contract.sarif.models import (
+    SarifArtifact,
     SarifLocation,
     SarifRegion,
     SarifResult,
@@ -17,6 +18,7 @@ from swb_contract.sarif.models import (
 )
 
 __all__ = [
+    "SarifArtifact",
     "SarifLocation",
     "SarifRegion",
     "SarifResult",

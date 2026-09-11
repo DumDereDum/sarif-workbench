@@ -11,19 +11,23 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import case, func
+from sqlalchemy import case, false, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from swb_contract.fstec import FSTEC_LEVEL_ORDER, level_label
+from swb_contract.sarif.parser import parse_document_info
 from swb_contract.severity import SEV_ORDER
 from swb_contract.verdict import VERDICT_ORDER
 
 from ..ai.analyze_loop import is_analysis_in_progress
 from ..db import get_db
 from ..ingest import MetaValidationError, ingest
-from ..models import Finding, FindingIdentity, Project, Rule, Run
+from ..models import Finding, FindingIdentity, Project, Rule, RuleImpact, Run
 from ..storage import load_blob, save_blob, delete_blob
+from .. import criticality
+from ..criticality import recompute_run
 from ..verdicts import recompute_counts_by_verdict, write_verdict
 
 logger = logging.getLogger(__name__)
@@ -51,11 +55,65 @@ _DEFAULT_MAX_UPLOAD_MB = 50
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
+_NO_GIT_COMMIT = {"", "unknown", "0" * 40, "0000000"}
+
+
+def _clean(value: str | None) -> str | None:
+    """Значение провенанса без заглушек CLI: «unknown» — это не название."""
+    v = (value or "").strip()
+    return None if not v or v == "unknown" else v
+
+
+def _has_git_provenance(provenance: dict) -> bool:
+    """Были ли у CLI настоящие git-сведения о сканированном дереве.
+
+    `enrich --no-git` (и запуск вне git-репозитория) всё равно заполняет
+    `repo` именем каталога, а ветку и коммит — заглушками. Отличить это от
+    настоящего прогона в CI можно только по ним.
+    """
+    commit = (provenance.get("commit") or provenance.get("commit_short") or "").strip()
+    return bool(_clean(provenance.get("branch"))) and commit.lower() not in _NO_GIT_COMMIT
+
+
 def _severity_order_expr() -> ColumnElement:
     """CASE, эмулирующий смысловой порядок SEV_ORDER (critical>...>note) в SQL."""
     return case(
         *[(Finding.severity == s, i) for i, s in enumerate(SEV_ORDER)],
         else_=len(SEV_ORDER),
+    )
+
+
+# Подписи групп агрегации по уровню критичности. Уровни берутся из контракта
+# (`level_label`), две остальные группы — не уровни и своей подписи в методике
+# не имеют.
+_FSTEC_GROUP_LABELS: dict[str, str] = {
+    **{key: level_label(key) for key in FSTEC_LEVEL_ORDER},
+    "needs_assessment": "Требует оценки",
+    "not_applicable": "Не применимо",
+}
+
+
+def _fstec_order_expr() -> ColumnElement:
+    """CASE, эмулирующий порядок уровней ФСТЭК в SQL.
+
+    Сначала посчитанные уровни от критического к низкому, затем «требует
+    оценки» и «не применимо» — они не уровни, и ставить их между «Средним» и
+    «Низким» значило бы притворяться, что оценка есть.
+    """
+    order = (*criticality.COUNTS_KEYS,)
+    return case(
+        *[
+            (
+                case(
+                    (Finding.fstec_status == "assessed", Finding.fstec_level),
+                    else_=Finding.fstec_status,
+                )
+                == key,
+                i,
+            )
+            for i, key in enumerate(order)
+        ],
+        else_=len(order),
     )
 
 
@@ -83,6 +141,9 @@ def _serialize_finding(f: Finding) -> dict:
         "rule_id": f.rule_id,
         "rule_name": f.rule_name,
         "cwe": f.cwe,
+        "security_severity": f.security_severity,
+        # уровень критичности по методике ФСТЭК — из сохранённых колонок
+        "fstec": criticality.summary(f),
         "uri": f.uri,
         "start_line": f.start_line,
         "scope": f.scope,
@@ -125,6 +186,17 @@ def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ing
     (project_id, swb_id) — ADR 0001 §6. Общая для обычной загрузки и ветки
     meta_updated (T-33, ADR §7) — та же логика для обеих.
     """
+    tool = ingested.get("tool") or "unknown"
+    # Заготовки заводятся только для правил, которые действительно
+    # сработали, а не для всего каталога из `tool.driver.rules`: Semgrep
+    # кладёт в отчёт весь свой реестр (1074 правила при 12 находках), и
+    # очередь на разбор мгновенно наполнилась бы правилами, которых в коде
+    # нет.
+    fired = {str(f["rule_id"]) for f in ingested["findings"] if f.get("rule_id")}
+    known_impacts = {
+        r.rule_id
+        for r in db.query(RuleImpact.rule_id).filter(RuleImpact.tool == tool)
+    }
     for rule_id, info in ingested["rules"].items():
         db.add(Rule(
             run_id=run_id,
@@ -134,6 +206,27 @@ def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ing
             help_uri=info["help_uri"],
             default_severity=info["default_severity"],
         ))
+        # Заготовка оценки правила для методики ФСТЭК: пустая строка и есть
+        # очередь на разбор специалистом. Заводится один раз на (tool,
+        # rule_id) и переживает новые прогоны — оценка правила не зависит
+        # ни от прогона, ни от проекта.
+        #
+        # Никаких автоматических пометок «не уязвимость» здесь нет.
+        # Проверялось на данных: вывести это из отсутствия CWE нельзя (у
+        # Bandit его нет ни у одного правила, а он линтер безопасности), из
+        # каталога MITRE — тоже: у CWE-242 «использование заведомо опасной
+        # функции» там стоит Scope=Other, Impact=Varies by Context, и
+        # автоотсев выбросил бы 37 находок Svacer как безобидные.
+        if rule_id in fired and rule_id not in known_impacts:
+            known_impacts.add(rule_id)
+            db.add(RuleImpact(tool=tool, rule_id=rule_id))
+
+    # Некоторые инструменты присылают неполный каталог правил — заготовку
+    # надо завести и для таких, иначе их находки навсегда останутся без
+    # оценки и не попадут в очередь.
+    for rule_id in sorted(fired - known_impacts):
+        known_impacts.add(rule_id)
+        db.add(RuleImpact(tool=tool, rule_id=rule_id))
 
     now = datetime.utcnow()
     identities: dict[str, FindingIdentity] = {}
@@ -244,6 +337,10 @@ def _dedup_response(
     # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
     db.flush()
     recompute_counts_by_verdict(db, str(existing.id))
+    criticality.recompute_counts_by_fstec(db, str(existing.id))
+    # п. 19 методики: пересчёт при появлении новых сведений. Здесь meta
+    # перезалита поверх того же прогона — состав находок мог измениться.
+    recompute_run(db, str(existing.id))
     db.commit()
 
     return {
@@ -288,6 +385,27 @@ async def upload_run(
     # дубль. Определение проекта — из provenance.repo meta, как и раньше.
     provenance = meta_data.get("provenance", {})
     repo: str = provenance.get("repo", "unknown")
+    # Отчёт мог быть выгружен с сервера анализатора, без исходников рядом. В
+    # этом случае CLI (`enrich --no-git`) всё равно пишет `repo` — имя
+    # каталога, из которого его запускали, — и заглушки вместо ветки и
+    # коммита. Признак «git-данных не было» и есть повод предпочесть имя
+    # проекта из самого отчёта: анализатор знает, что сканировал, а каталог
+    # запуска про это не говорит ничего.
+    #
+    # Явно заданное имя (`enrich --project`) не перебивается ничем: человек
+    # сказал, к какому проекту относится отчёт.
+    #
+    # Разбор документа здесь, а не из результата ingest(): проект нужен
+    # раньше — по нему идёт проверка на повторную загрузку.
+    if not provenance.get("repo_explicit") and not _has_git_provenance(provenance):
+        try:
+            doc_project = parse_document_info(json.loads(sarif_bytes)).project
+        except (ValueError, TypeError):
+            # Битый SARIF не должен падать здесь: разбор идёт до штатной
+            # обработки в ingest(), которая вернёт 422 с внятным сообщением.
+            doc_project = None
+        if doc_project:
+            repo = doc_project
     project_id = re.sub(r"[^a-z0-9-]", "-", repo.lower()) if repo else "unknown"
 
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -331,9 +449,17 @@ async def upload_run(
         id=run_id,
         project_id=project_id,
         commit=provenance.get("commit_short") or provenance.get("commit", "unknown"),
-        branch=provenance.get("branch", "unknown"),
+        # Сведения из отчёта подставляются только там, где их не дал CLI:
+        # он знает git-репозиторий, в котором работал, и его данные точнее.
+        # «unknown» от CLI — это отсутствие сведений, а не название ветки.
+        branch=(
+            _clean(provenance.get("branch"))
+            or ingested["document"].branch
+            or "unknown"
+        ),
         tool=ingested["tool"],
         tool_version=ingested["tool_version"],
+        analyzer_config=ingested["document"].analyzer_config,
         scanned_at=provenance.get("scanned_at"),
         sarif_key=sarif_key,
         meta_key=meta_key,
@@ -365,6 +491,11 @@ async def upload_run(
     # (autoflush=False), а агрегатный запрос читает из БД напрямую.
     db.flush()
     recompute_counts_by_verdict(db, run_id)
+    criticality.recompute_counts_by_fstec(db, run_id)
+    # п. 19: уровень критичности считается сразу после загрузки. Пока
+    # профиль ИС и оценки правил не заполнены, находки получают статус
+    # «требует оценки» с перечнем недостающих показателей.
+    recompute_run(db, run_id)
     db.commit()
 
     return {
@@ -391,10 +522,12 @@ def get_run(run_id: str, db: Session = Depends(get_db)):
         "branch": run.branch,
         "tool": run.tool,
         "tool_version": run.tool_version,
+        "analyzer_config": run.analyzer_config,
         "scanned_at": run.scanned_at,
         "uploaded_at": run.uploaded_at.isoformat() if run.uploaded_at else None,
         "counts": run.counts or {},
         "counts_by_verdict": run.counts_by_verdict or {},
+        "counts_by_fstec": run.counts_by_fstec or {},
         "baseline_run_id": p.baseline_run_id if p else None,
     }
 
@@ -406,6 +539,7 @@ def list_findings(
     verdict: str | None = None,
     rule: str | None = None,
     cwe: str | None = None,
+    fstec_level: str | None = None,
     file: str | None = None,
     q: str | None = None,
     sort: str = "severity",
@@ -433,6 +567,21 @@ def list_findings(
         query = query.filter(Finding.rule_id.contains(rule))
     if cwe:
         query = query.filter(Finding.cwe.contains(cwe))
+    if fstec_level:
+        # Принимает и уровни методики, и `needs_assessment`/`not_applicable`:
+        # находки без оценки надо уметь отфильтровать так же, как посчитанные,
+        # иначе очередь на разбор не увидеть.
+        wanted = {v.strip() for v in fstec_level.split(",")}
+        levels = wanted & set(FSTEC_LEVEL_ORDER)
+        statuses = wanted - levels
+        clauses = []
+        if levels:
+            clauses.append(Finding.fstec_level.in_(levels))
+        if statuses:
+            clauses.append(Finding.fstec_status.in_(statuses))
+        # Ни одно переданное значение не распознано — отдаём пустой список,
+        # а не весь ран: молча проигнорированный фильтр опаснее пустоты.
+        query = query.filter(or_(*clauses)) if clauses else query.filter(false())
     if file:
         query = query.filter(Finding.uri.contains(file))
     if q:
@@ -452,6 +601,8 @@ def list_findings(
         order_expr = _severity_order_expr()
     elif sort == "verdict":
         order_expr = _verdict_order_expr()
+    elif sort == "fstec":
+        order_expr = _fstec_order_expr()
     else:
         # Неизвестное имя сортировки не должно превращаться в SQL-инъекцию —
         # только из белого списка; иначе — детерминированный fallback на id.
@@ -484,9 +635,11 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
     base = db.query(Finding).filter(Finding.run_id == run_id)
     count_expr = func.count(Finding.id)
     groups: list[dict]
-    # аннотация нужна явно: ветки ниже возвращают Row разной формы (2- и
-    # 3-колоночные) — без неё mypy сузил бы тип rows по первой ветке.
+    # аннотации нужны явно: ветки ниже возвращают Row разной формы (2- и
+    # 3-колоночные), а ключ группировки — то coalesce, то CASE. Без них mypy
+    # сузил бы оба типа по первой ветке.
     rows: list[Any]
+    key_expr: ColumnElement
 
     if by == "verdict":
         key_expr = func.coalesce(FindingIdentity.verdict, "unmarked")
@@ -525,6 +678,23 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
             .all()
         )
         groups = [{"key": key, "label": key, "count": count} for key, count in rows]
+    elif by == "fstec_level":
+        # Ключ группы — уровень у посчитанных находок и статус у остальных.
+        # «Требует оценки» и «не применимо» — полноценные группы: очередь на
+        # разбор должна быть видна в той же панели, что и результат.
+        key_expr = case(
+            (Finding.fstec_status == "assessed", Finding.fstec_level),
+            else_=func.coalesce(Finding.fstec_status, "needs_assessment"),
+        )
+        rows = (
+            base.with_entities(key_expr.label("key"), count_expr.label("count"))
+            .group_by(key_expr)
+            .all()
+        )
+        groups = [
+            {"key": key, "label": _FSTEC_GROUP_LABELS.get(key, key), "count": count}
+            for key, count in rows
+        ]
     else:
         # "severity" и любое нераспознанное значение `by` — прежнее поведение.
         key_expr = func.coalesce(Finding.severity, "note")
@@ -637,6 +807,9 @@ def reset_verdicts(run_id: str, db: Session = Depends(get_db)):
 
     # T-32: единственная реализация подсчёта — агрегатный SQL, та же транзакция.
     recompute_counts_by_verdict(db, run_id)
+    # сброс снимает «ложное срабатывание» — находки возвращаются в расчёт
+    criticality.recompute_run(db, run_id)
+    criticality.recompute_counts_by_fstec(db, run_id)
     db.commit()
     return {"reset": reset_count}
 

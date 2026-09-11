@@ -6,6 +6,7 @@ import { SEV_ORDER, SEV } from '../lib/severity'
 import { VD_ORDER, VERDICT } from '../lib/verdict'
 import { groupRunsByTool, sortToolGroups, fmtToolName } from '../lib/toolGroups'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { FstecProfileForm } from '../components/FstecProfileForm'
 
 function SevBar({ counts }: { counts: Partial<Record<string, number>> }) {
   const total = SEV_ORDER.reduce((s, k) => s + (counts[k] ?? 0), 0) || 1
@@ -140,6 +141,8 @@ export default function ProjectRuns() {
           <b>Бейзлайн сравнения</b> — прогон-эталон, относительно которого считается дельта и переносится разметка. Отметьте звёздочкой нужный прогон.
         </div>
       </div>
+
+      <FstecProfileForm projectId={project.id} />
 
       {toolGroups.length > 1 && (
         <div className="panel" style={{ marginBottom: 16 }}>

@@ -1,4 +1,4 @@
-import { Routes, Route, useNavigate, useParams, Link } from 'react-router-dom'
+import { Routes, Route, useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api/client'
 import { SEV_ORDER, SEV } from './lib/severity'
@@ -6,6 +6,7 @@ import { VD_ORDER, VERDICT } from './lib/verdict'
 import Projects from './routes/Projects'
 import ProjectRuns from './routes/ProjectRuns'
 import RunView from './routes/RunView'
+import RuleImpacts from './routes/RuleImpacts'
 
 function Sidebar() {
   const navigate = useNavigate()
@@ -14,6 +15,7 @@ function Sidebar() {
 
   const projectId = params.projectId
   const runId = params.runId
+  const isRules = useLocation().pathname.startsWith('/rules')
 
   return (
     <aside className="sidebar">
@@ -26,11 +28,17 @@ function Sidebar() {
       </div>
 
       <nav className="nav">
-        <Link to="/" className={`nav-item${!projectId && !runId ? ' active' : ''}`}>
+        <Link to="/" className={`nav-item${!projectId && !runId && !isRules ? ' active' : ''}`}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 7h18M3 12h18M3 17h18"/>
           </svg>
           Проекты
+        </Link>
+        <Link to="/rules" className={`nav-item${isRules ? ' active' : ''}`}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+          </svg>
+          Оценка правил
         </Link>
       </nav>
 
@@ -134,6 +142,7 @@ export default function App() {
       <Route path="/" element={<AppShell><Projects /></AppShell>} />
       <Route path="/projects/:projectId" element={<AppShell><ProjectRunsPage /></AppShell>} />
       <Route path="/projects/:projectId/runs/:runId" element={<AppShell><RunViewPage /></AppShell>} />
+      <Route path="/rules" element={<AppShell><RuleImpacts /></AppShell>} />
     </Routes>
   )
 }

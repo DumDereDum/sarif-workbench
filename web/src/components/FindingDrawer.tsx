@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, normalizeDetail } from '../api/client'
 import { SEV, sevStyle } from '../lib/severity'
+import { FstecBreakdown } from './FstecBreakdown'
+import { ExploitationField } from './ExploitationField'
 import { VERDICT, SRC_LABEL, verdictStyle, verdictLabel } from '../lib/verdict'
 
 interface Props {
@@ -111,6 +113,25 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
             </div>
 
             <div className="dr-body">
+              {/* Уровень критичности идёт первым: он отвечает на вопрос
+                  «за какой срок положено устранить», а остальные секции
+                  объясняют саму находку. */}
+              <FstecBreakdown fstec={f.fstec} />
+
+              {/* Показатель E — единственный, который задаётся на самой
+                  находке: сведения об эксплуатации относятся к уязвимости, а
+                  не к коду. Стоит сразу под разложением, где виден его вклад. */}
+              {f.exploitation && (
+                <div className="dr-sec">
+                  <h3>Сведения об эксплуатации (E)</h3>
+                  <ExploitationField
+                    findingId={f.id}
+                    runId={runId}
+                    exploitation={f.exploitation}
+                  />
+                </div>
+              )}
+
               {/* Location */}
               <div className="dr-sec">
                 <h3>Расположение</h3>
@@ -181,13 +202,18 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
               )}
 
               {/* Message */}
-              <div className="dr-sec">
-                <h3>Сообщение анализатора</h3>
-                <div className="rule-desc">{f.message}</div>
-              </div>
+              {f.message && (
+                <div className="dr-sec">
+                  <h3>Сообщение анализатора</h3>
+                  <div className="rule-desc">{f.message}</div>
+                </div>
+              )}
 
               {/* Rule description */}
-              {f.rule_description && (
+              {/* Svace кладёт в `shortDescription` то же самое имя правила —
+                  описания у него нет. Повторять заголовок карточки под видом
+                  описания незачем: пустой блок честнее выдуманного. */}
+              {f.rule_description && f.rule_description !== f.rule_name && (
                 <div className="dr-sec">
                   <h3>Описание правила{f.cwe ? ` (${f.cwe})` : ''}</h3>
                   <div className="rule-desc">{f.rule_description}</div>

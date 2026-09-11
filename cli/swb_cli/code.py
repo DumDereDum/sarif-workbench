@@ -94,18 +94,58 @@ def read_source_lines(source_root: Path, uri: str) -> list[str] | None:
     return file_path.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
+def embedded_source_lines(uri: str, text: str) -> list[str] | None:
+    """Lines of a file the tool embedded in the report itself.
+
+    The size cap of T-02 applies here too: the report is untrusted input, and
+    a multi-megabyte blob in `contents.text` must not be split into memory
+    just because it arrived inside the SARIF rather than from disk.
+    """
+    if not text.strip():
+        # Svace writes `contents: {"text": ""}` for every artifact when the
+        # export ran without contents. An empty string is the absence of the
+        # source, not a zero-line file: treated as text it would yield a blank
+        # snippet and a content fingerprint over an empty window — the same
+        # hash for every finding in the file.
+        return None
+
+    max_bytes = _max_source_bytes()
+    size = len(text.encode("utf-8", errors="replace"))
+    if size > max_bytes:
+        logger.warning(
+            "Embedded contents for uri %r are %d bytes, over the %d MB source "
+            "limit (SWB_MAX_SOURCE_MB); skipping snippet",
+            uri,
+            size,
+            max_bytes // (1024 * 1024),
+        )
+        return None
+    return text.splitlines()
+
+
 def extract_snippet(
-    source_root: Path,
+    source_root: Path | None,
     uri: str,
     start_line: int,
     end_line: int | None,
     context_policy: str,
     context_lines: int,
+    lines: list[str] | None = None,
 ) -> CodeSnippet | None:
+    """Cut the snippet around a finding out of the source.
+
+    ``lines`` is the source when the caller has already resolved it — from
+    disk, or from `artifacts[].contents.text` when the file is not on this
+    machine. Without it the file is read from ``source_root``, which is then
+    required.
+    """
     if context_policy == "none":
         return None
 
-    lines = read_source_lines(source_root, uri)
+    if lines is None:
+        if source_root is None:
+            return None
+        lines = read_source_lines(source_root, uri)
     if lines is None:
         return None
     total = len(lines)
