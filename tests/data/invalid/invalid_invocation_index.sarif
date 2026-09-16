@@ -1,0 +1,34 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "rules": [
+            { "id": "SQL001", "defaultConfiguration": { "level": "error" } }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "ruleConfigurationOverrides": [
+            { "descriptor": { "id": "SQL001" }, "configuration": { "level": "note" } }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "SQL001",
+          "provenance": { "invocationIndex": -1 },
+          "message": { "text": "invocationIndex is -1, the SARIF sentinel for 'not associated with any invocation'. Must be rejected by the >= 0 check and fall to rule.default_level (error), even though an override with a matching descriptor exists in invocations[0]." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/db.py" }, "region": { "startLine": 42 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}

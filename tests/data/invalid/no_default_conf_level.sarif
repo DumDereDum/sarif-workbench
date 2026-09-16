@@ -1,0 +1,38 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "rules": [
+            {
+              "id": "NO_DEFAULT_CFG"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "NO_DEFAULT_CFG",
+          "message": {
+            "text": "Rule has no defaultConfiguration at all — _parse_rule defaults default_level to warning."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/d.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

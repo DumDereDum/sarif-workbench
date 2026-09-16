@@ -1,0 +1,32 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "rules": [
+            { "id": "SQL001", "defaultConfiguration": { "level": "error" } }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "ruleConfigurationOverrides": []
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "SQL001",
+          "provenance": { "invocationIndex": 0 },
+          "message": { "text": "invocationIndex valid, ruleConfigurationOverrides is an empty list — same edge case as 06, expected result is warning, not error." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/db.py" }, "region": { "startLine": 42 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}

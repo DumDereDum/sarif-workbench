@@ -15,6 +15,7 @@ from .models import (
     SarifRun,
     SarifTool,
     SarifThreadFlow,
+    SarifInvocation,
 )
 
 
@@ -38,8 +39,12 @@ def parse_sarif_data(data: dict) -> list[SarifRun]:
 
 def _parse_run(idx: int, run: dict) -> SarifRun:
     tool = _parse_tool(run.get("tool", {}))
+    invocations = [
+        _parse_invocation(inv)
+        for inv in run.get("invocations", [])
+    ]
     results = [
-        _parse_result(idx, ridx, r)
+        _parse_result(idx, ridx, r, tool.rules, invocations)
         for ridx, r in enumerate(run.get("results", []))
     ]
     bases = run.get("originalUriBaseIds")
@@ -47,6 +52,7 @@ def _parse_run(idx: int, run: dict) -> SarifRun:
         index=idx,
         tool=tool,
         results=results,
+        invocations=invocations,
         original_uri_base_ids=bases if isinstance(bases, dict) else {},
     )
 
@@ -79,6 +85,12 @@ def _parse_rule(rule: dict) -> SarifRule:
     )
 
 
+def _parse_invocation(invocation: dict) -> SarifInvocation:
+    return SarifInvocation(
+        ruleConfigurationOverrides = invocation.get("ruleConfigurationOverrides", [])
+    )
+
+
 def _parse_security_severity(sec_sev: Any) -> float | None:
     """Tolerant cast of properties["security-severity"] to float.
 
@@ -97,16 +109,49 @@ def _parse_security_severity(sec_sev: Any) -> float | None:
         return None
 
 
-def _parse_result(run_idx: int, result_idx: int, result: dict) -> SarifResult:
+def _parse_result(run_idx: int, result_idx: int, result: dict, rules: list[SarifRule], invocations: list[SarifInvocation]) -> SarifResult:
     locations = [_parse_location(loc) for loc in result.get("locations", [])]
     related_locations = [
         _parse_related_location(loc) for loc in result.get("relatedLocations", [])
     ]
+
+    level = result.get("level", None)
+    # Если уровень не указан, идем по алгоритму определения критичности согласно SARIF-v2.1.0
+    if level is None:
+        # selected_rule - правило, подходящее для результата
+        rule_Id = result.get("ruleId", None)
+
+        if rule_Id is not None:
+            selected_rule = [r for r in rules if r.rule_id == rule_Id]
+        else:
+            selected_rule = []
+
+        if selected_rule:
+            selected_rule = selected_rule[0]
+            invocation_index = result.get("provenance", {}).get("invocationIndex", None)
+            # Если существуют пользовательские настройки
+            if invocation_index is not None and invocation_index < len(invocations) and invocation_index >= 0:
+                rule_configuration = invocations[invocation_index].ruleConfigurationOverrides
+                # Находим для выбранного правила пользовательские настройки
+                for config in rule_configuration:
+                    descriptor_id = config.get("descriptor", {}).get("id", None)
+                    if descriptor_id == rule_Id:
+                        # Записываем уровень который был указан пользователем
+                        level = config.get("configuration", {}).get("level", None)
+                        break
+            # В противном случае берется уровень по умолчанию в самом правиле
+            else:
+                level = selected_rule.default_level
+
+    if level is None:
+        level = "warning"
+        
+
     return SarifResult(
         run_index=run_idx,
         result_index=result_idx,
         rule_id=result.get("ruleId", ""),
-        level=result.get("level", "warning"),
+        level=level,
         message=_extract_text(result.get("message", {})),
         locations=locations,
         related_locations=related_locations,

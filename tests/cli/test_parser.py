@@ -42,6 +42,31 @@ def test_minimal_sarif():
     assert result.locations[0].uri == "src/db.py"
     assert result.locations[0].region.start_line == 42
 
+
+def test_defaultConfiguration_level():
+    runs = parse_sarif(VALID / "default_conf_level.sarif")
+    run = runs[0]
+    assert run.results[0].level == "error"
+
+
+def test_no_level_no_rule():
+    runs = parse_sarif(VALID / "no_level_no_rule_id.sarif")
+    run = runs[0]    
+    assert run.results[0].level == "warning"
+
+
+def test_no_override_settings():
+    runs = parse_sarif(VALID / "no_override.sarif")
+    run = runs[0]    
+    assert run.results[0].level == "warning"    
+
+
+def test_override_level():
+    runs = parse_sarif(VALID / "no_override.sarif")
+    run = runs[0]    
+    assert run.results[0].level == "warning"     
+
+
 def test_empty_runs():
     runs = parse_sarif(VALID / "empty_runs.sarif")
     assert runs == []
@@ -119,3 +144,27 @@ def test_wrong_type_runs_raises():
     # "runs" — строка вместо массива, итерация по ней ломается
     with pytest.raises((TypeError, AttributeError)):
         parse_sarif(INVALID / "wrong_type_runs.sarif")
+
+
+def test_invocation_index_below_zero():
+    runs = parse_sarif(INVALID / "invalid_invocation_index.sarif")
+    run = runs[0]
+    assert run.results[0].level == "error"
+
+
+def test_invocation_index_out_of_range():
+    runs = parse_sarif(INVALID / "invocation_index_out_of_range.sarif")
+    run = runs[0]
+    assert run.results[0].level == "error"
+
+
+def test_no_default_configuration():
+    runs = parse_sarif(INVALID / "no_default_conf_level.sarif")
+    run = runs[0]
+    assert run.results[0].level == "warning"
+
+
+def test_no_find_rule():
+    runs = parse_sarif(INVALID / "rule_id_not_in_rules.sarif")
+    run = runs[0]
+    assert run.results[0].level == "warning"        

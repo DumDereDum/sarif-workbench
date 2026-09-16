@@ -85,6 +85,12 @@ class SarifRun:
     index: int
     tool: SarifTool
     results: list[SarifResult] = field(default_factory=list)
+    invocations: list[SarifInvocation] = field(default_factory=list)
     # Raw `originalUriBaseIds` mapping: base id -> artifactLocation dict
     # ({"uri": ..., "uriBaseId": ...}); used to resolve location uriBaseId.
     original_uri_base_ids: dict = field(default_factory=dict)
+
+
+@dataclass
+class SarifInvocation:
+    ruleConfigurationOverrides: list[dict] = field(default_factory=list)

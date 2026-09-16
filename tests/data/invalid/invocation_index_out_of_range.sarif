@@ -1,0 +1,29 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TestTool",
+          "rules": [
+            { "id": "SQL001", "defaultConfiguration": { "level": "error" } }
+          ]
+        }
+      },
+      "invocations": [
+        { "executionSuccessful": true, "ruleConfigurationOverrides": [] }
+      ],
+      "results": [
+        {
+          "ruleId": "SQL001",
+          "provenance": { "invocationIndex": 5 },
+          "message": { "text": "invocationIndex=5 but invocations[] has only 1 element (index 0) — out of range, must fall to rule.default_level (error), not crash with IndexError." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/db.py" }, "region": { "startLine": 42 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}
