@@ -68,6 +68,7 @@ def _serialize_finding(db: Session, f: Finding) -> dict:
     return {
         "id": f.id,
         "swb_id": f.swb_id,
+        "fi_group_id": identity.fi_group_id if identity else None,
         "occurrence": f.occurrence,
         # версия алгоритма и уровень отпечатка — с identity (ADR 0001 §6, T-15)
         "fingerprint_algo": identity.algo if identity else None,

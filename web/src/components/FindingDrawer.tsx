@@ -121,6 +121,8 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
                   {f.lang && <><span className="k">Язык</span><span className="v">{f.lang}</span></>}
                   <span className="k">swb_id</span>
                   <span className="v mono">{f.swb_id}</span>
+                  <span className="k">fi_group_id</span>
+                  <span className="v mono">{f.fi_group_id ?? '—'}</span>
                   {/* T-39: primary location + count/list of the rest (ADR 0001 §8 — payload, not identity) */}
                   {f.extra_locations.length > 0 && (
                     <><span className="k">Ещё локаций</span><span className="v">{f.extra_locations.length}</span></>

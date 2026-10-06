@@ -27,7 +27,6 @@ def resolve_uri(
     uri_base_id: str | None,
     original_uri_base_ids: dict,
 ) -> str:
-    """Normalize a SARIF artifact uri per ADR 0001 §3 (5 steps)."""
     
     # 1. resolve uriBaseId via originalUriBaseIds (recursively), prefixing left
     full = _resolve_base(uri, uri_base_id, original_uri_base_ids, set())
