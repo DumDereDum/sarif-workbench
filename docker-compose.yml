@@ -15,7 +15,7 @@ services:
       - ./logs:/logs
     environment:
       DATA_DIR: /data
-      DATABASE_URL: sqlite:////data/swb.db
+      DATABASE_URL: ${DATABASE_URL}
       STORAGE_BACKEND: local
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: /logs/server.log

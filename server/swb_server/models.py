@@ -99,6 +99,7 @@ class FindingIdentity(Base):
     id = Column(String, primary_key=True, default=lambda: _uid("fi-"))
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     swb_id = Column(String, nullable=False)
+    fi_group_id = Column(String)
     algo = Column(String, nullable=False, default="swb-fp/2")
     level = Column(String, nullable=False, default="legacy")  # tool / content / legacy
 
@@ -182,6 +183,7 @@ class Finding(Base):
     rule_name = Column(String)
     rule_description = Column(Text)
     help_uri = Column(String)
+    norm_uri = Column(String)
     cwe = Column(String)
     severity = Column(String, default="note")
     message = Column(Text)

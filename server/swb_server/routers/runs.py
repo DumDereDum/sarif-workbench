@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import difflib
 import json
 import logging
 import os
@@ -50,6 +51,7 @@ _SORT_COLUMNS: dict[str, ColumnElement] = {
 _DEFAULT_MAX_UPLOAD_MB = 50
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
 
+_FI_GROUP_SIMILARITY_THRESHOLD = 0.70
 
 def _severity_order_expr() -> ColumnElement:
     """CASE, эмулирующий смысловой порядок SEV_ORDER (critical>...>note) в SQL."""
@@ -75,6 +77,7 @@ def _serialize_finding(f: Finding) -> dict:
     return {
         "id": f.id,
         "swb_id": f.swb_id,
+        "fi_group_id": (f.identity.fi_group_id if f.identity else None),
         "occurrence": f.occurrence,
         # версия алгоритма и уровень отпечатка — с identity (ADR 0001 §6, T-15)
         "fingerprint_algo": (f.identity.algo if f.identity else None),
@@ -120,6 +123,83 @@ async def _read_limited(upload: UploadFile, field: str) -> bytes:
     return b"".join(chunks)
 
 
+def _generate_or_rewrite_fi_group_id(db: Session, repo_id: str | None, run_id: str | None, norm_uri: str | None, 
+                                     blame_commit: str | None, snippet_start: int | None, snippet_end: int | None, snippet: str | None) -> str | None:
+
+    if repo_id is None or norm_uri is None or run_id is None:
+        return None
+    
+    rn = (
+        func.row_number()
+        .over(partition_by=FindingIdentity.id, order_by=Finding.id)
+        .label("rn")
+    )
+    ranked = (
+        db.query(
+            FindingIdentity.id.label("identity_id"),
+            FindingIdentity.fi_group_id.label("fi_group_id"),
+            Finding.norm_uri.label("norm_uri"),
+            Finding.git.label("git"),
+            Finding.snippet.label("snippet"),
+            Finding.snippet_start.label("snippet_start"),
+            Finding.snippet_end.label("snippet_end"),
+            rn,
+        )
+        .join(Finding, Finding.identity_id == FindingIdentity.id)
+        .join(Run, Run.id == Finding.run_id)
+        .filter(FindingIdentity.project_id == repo_id, Finding.norm_uri == norm_uri, Run.id != run_id)
+        .subquery()
+    )
+    candidates = (
+        db.query(
+            ranked.c.fi_group_id,
+            ranked.c.git,
+            ranked.c.snippet,
+            ranked.c.snippet_start,
+            ranked.c.snippet_end,
+            ranked.c.norm_uri,
+        )
+        .filter(ranked.c.rn == 1)
+        .all()
+    )
+    fi_group_id = ""
+
+    for row in candidates:
+        print(row)
+        db_fi_group_id = row[0]
+
+        db_bl_commit = (row[1] or {}).get("blame_commit")
+        if db_bl_commit == "": db_bl_commit = None
+
+        db_snippet = row[2]
+        db_snippet_start, db_snippet_end = row[3], row[4]
+        print(blame_commit, db_bl_commit)
+        if (blame_commit is not None and db_bl_commit is not None) and blame_commit == db_bl_commit:
+            # все данные значения - не None
+            if all([sn is not None for sn in [snippet_start, snippet_end, db_snippet_start, db_snippet_end]]):
+                # если сниппеты хоть как-то пересекаются при таком же blame_commit, то считаем, что находка одна и та же
+                print(snippet_start, snippet_end, db_snippet_start, db_snippet_end)
+                if (snippet_start <= db_snippet_start and db_snippet_start <= snippet_end) or \
+                    (db_snippet_start <= snippet_start and snippet_start <= db_snippet_end):
+                    # допускается, что db_fi_group_id is None
+                    print("MATCHING!")
+                    fi_group_id = db_fi_group_id
+                    break
+                # серая зона. Пока сравниваем сниппеты и сравниваем очень поверхностно
+        elif snippet:
+            print("snippet:", snippet, "\ndb_snippet:", db_snippet)
+            if db_snippet and difflib.SequenceMatcher(None, snippet, db_snippet).ratio() >= _FI_GROUP_SIMILARITY_THRESHOLD:
+                fi_group_id = db_fi_group_id
+                break       
+
+    if fi_group_id == "":
+        fi_group_id = f"fi:{uuid.uuid4().hex[:24]}"
+
+    print("FI_GROUP_ID IS:", fi_group_id)  
+
+    return fi_group_id
+
+
 def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ingested: dict) -> None:
     """Пишет Rule/Finding рана из ingest(); find-or-create identity по
     (project_id, swb_id) — ADR 0001 §6. Общая для обычной загрузки и ветки
@@ -149,9 +229,19 @@ def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ing
                 .first()
             )
             if identity is None:
+                norm_uri = fd["norm_uri"]
+                git = fd.get("git") or {}
+                blame_commit = git.get("blame_commit")
+                snippet_start = fd["snippet_start"]
+                snippet_end = fd["snippet_end"]
+                snippet = fd["snippet"]
+
+                fi_group_id = _generate_or_rewrite_fi_group_id(db, project_id, run_id, norm_uri, blame_commit, snippet_start, snippet_end, snippet)
+
                 identity = FindingIdentity(
                     project_id=project_id,
                     swb_id=swb_id,
+                    fi_group_id=fi_group_id,
                     algo=algo,
                     level=level,
                     first_seen_run_id=run_id,

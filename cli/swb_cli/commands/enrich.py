@@ -194,6 +194,9 @@ def _build_findings(
                 else None
             )
 
+            if source_lines == None:
+                skipped_no_locations += 1
+
             code = None
             git = None
             if source_root:

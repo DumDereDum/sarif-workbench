@@ -82,7 +82,7 @@ export interface Run {
 }
 
 export interface FindingItem {
-  id: string; swb_id: string; occurrence: number
+  id: string; swb_id: string; fi_group_id: string | null; occurrence: number
   severity: string; rule_id: string; rule_name: string; cwe: string | null
   uri: string; start_line: number; scope: string | null; message: string
   verdict: string; verdict_source: string | null; lang: string | null
