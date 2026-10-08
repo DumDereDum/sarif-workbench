@@ -183,6 +183,7 @@ class Finding(Base):
     rule_name = Column(String)
     rule_description = Column(Text)
     help_uri = Column(String)
+    norm_uri = Column(String)
     cwe = Column(String)
     severity = Column(String, default="note")
     message = Column(Text)

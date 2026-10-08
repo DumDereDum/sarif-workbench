@@ -201,6 +201,8 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
         loc = vf.locator
         rule_id = loc.rule_id
         uri = loc.uri
+        norm_uri = loc.norm_uri
+
         start_line = loc.region.start_line
         end_line = loc.region.end_line
 
@@ -231,6 +233,7 @@ def ingest(sarif_bytes: bytes, meta: dict) -> dict:
             "rule_name": rule_info.get("name", ""),
             "rule_description": rule_info.get("description", ""),
             "help_uri": rule_info.get("help_uri"),
+            "norm_uri": norm_uri,
             "cwe": cwe,
             "severity": severity,
             "message": message,

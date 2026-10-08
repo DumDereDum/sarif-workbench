@@ -123,10 +123,10 @@ async def _read_limited(upload: UploadFile, field: str) -> bytes:
     return b"".join(chunks)
 
 
-def _generate_or_rewrite_fi_group_id(db: Session, repo_id: str | None, norm_uri: str | None, 
+def _generate_or_rewrite_fi_group_id(db: Session, repo_id: str | None, run_id: str | None, norm_uri: str | None, 
                                      blame_commit: str | None, snippet_start: int | None, snippet_end: int | None, snippet: str | None) -> str | None:
 
-    if repo_id is None or norm_uri is None:
+    if repo_id is None or norm_uri is None or run_id is None:
         return None
     
     rn = (
@@ -138,6 +138,7 @@ def _generate_or_rewrite_fi_group_id(db: Session, repo_id: str | None, norm_uri:
         db.query(
             FindingIdentity.id.label("identity_id"),
             FindingIdentity.fi_group_id.label("fi_group_id"),
+            Finding.norm_uri.label("norm_uri"),
             Finding.git.label("git"),
             Finding.snippet.label("snippet"),
             Finding.snippet_start.label("snippet_start"),
@@ -145,24 +146,25 @@ def _generate_or_rewrite_fi_group_id(db: Session, repo_id: str | None, norm_uri:
             rn,
         )
         .join(Finding, Finding.identity_id == FindingIdentity.id)
-        .filter(FindingIdentity.project_id == repo_id, Finding.uri == norm_uri)
+        .join(Run, Run.id == Finding.run_id)
+        .filter(FindingIdentity.project_id == repo_id, Finding.norm_uri == norm_uri, Run.id != run_id)
         .subquery()
     )
-    condidates = (
+    candidates = (
         db.query(
             ranked.c.fi_group_id,
             ranked.c.git,
             ranked.c.snippet,
             ranked.c.snippet_start,
             ranked.c.snippet_end,
+            ranked.c.norm_uri,
         )
         .filter(ranked.c.rn == 1)
         .all()
     )
-    
     fi_group_id = ""
 
-    for row in condidates:
+    for row in candidates:
         print(row)
         db_fi_group_id = row[0]
 
@@ -227,14 +229,14 @@ def _create_rules_and_findings(db: Session, *, run_id: str, project_id: str, ing
                 .first()
             )
             if identity is None:
-                uri = fd["uri"]
+                norm_uri = fd["norm_uri"]
                 git = fd.get("git") or {}
                 blame_commit = git.get("blame_commit")
                 snippet_start = fd["snippet_start"]
                 snippet_end = fd["snippet_end"]
                 snippet = fd["snippet"]
 
-                fi_group_id = _generate_or_rewrite_fi_group_id(db, project_id, uri, blame_commit, snippet_start, snippet_end, snippet)
+                fi_group_id = _generate_or_rewrite_fi_group_id(db, project_id, run_id, norm_uri, blame_commit, snippet_start, snippet_end, snippet)
 
                 identity = FindingIdentity(
                     project_id=project_id,
