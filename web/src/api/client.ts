@@ -136,6 +136,8 @@ export interface DiffResponse {
   run_id: string; baseline_run_id: string
   new: FindingItem[]; closed: FindingItem[]; unchanged: FindingItem[]
   counts: DiffCounts
+  category?: 'new' | 'closed' | 'unchanged'
+  total?: number; page?: number; page_size?: number
 }
 
 // ---- API calls ----
@@ -147,8 +149,9 @@ export const api = {
     })
     
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to delete run' }))
-      throw new Error(error.message || `HTTP ${response.status}: Failed to delete run`)
+      const body = await response.json().catch(() => null)
+      const error = parseErrorBody(body, `HTTP ${response.status}: Failed to delete run`)
+      throw new Error(error.message)
     }
   },
 
@@ -158,8 +161,9 @@ export const api = {
     })
     
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to delete project' }))
-      throw new Error(error.detail || error.message || 'Failed to delete project')
+      const body = await response.json().catch(() => null)
+      const error = parseErrorBody(body, `HTTP ${response.status}: Failed to delete project`)
+      throw new Error(error.message)
     }
   },
 
@@ -184,12 +188,15 @@ export const api = {
     return req(`/runs/${runId}/findings${qs ? '?' + qs : ''}`)
   },
 
-  aggregations: (runId: string, by: string): Promise<AggResponse> =>
-    req(`/runs/${runId}/aggregations?by=${by}`),
+  aggregations: (runId: string, by: string, params: Record<string, string> = {}): Promise<AggResponse> => {
+    const qs = new URLSearchParams({ by, ...params }).toString()
+    return req(`/runs/${runId}/aggregations?${qs}`)
+  },
 
-  diff: (runId: string, baselineRunId?: string): Promise<DiffResponse> => {
-    const qs = baselineRunId ? `?baseline=${encodeURIComponent(baselineRunId)}` : ''
-    return req(`/runs/${runId}/diff${qs}`)
+  diff: (runId: string, baselineRunId?: string, params: Record<string, string> = {}): Promise<DiffResponse> => {
+    const query = baselineRunId ? { ...params, baseline: baselineRunId } : params
+    const qs = new URLSearchParams(query).toString()
+    return req(`/runs/${runId}/diff${qs ? `?${qs}` : ''}`)
   },
 
   finding: (fid: string): Promise<unknown> =>

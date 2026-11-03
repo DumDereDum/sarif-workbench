@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, normalizeDetail } from '../api/client'
 import { SEV, sevStyle } from '../lib/severity'
 import { VERDICT, SRC_LABEL, verdictStyle, verdictLabel } from '../lib/verdict'
+import StatusMessage from './StatusMessage'
 
 interface Props {
   findingId: string | null
   runId: string
   onClose: () => void
+  onVerdictUpdated?: () => void
 }
 
 function CodeBlock({ snippet, hotLine }: { snippet: { start_line: number; lines: string[]; hot_line: number }; hotLine?: number }) {
@@ -28,7 +30,7 @@ function CodeBlock({ snippet, hotLine }: { snippet: { start_line: number; lines:
   )
 }
 
-export default function FindingDrawer({ findingId, runId, onClose }: Props) {
+export default function FindingDrawer({ findingId, runId, onClose, onVerdictUpdated }: Props) {
   const qc = useQueryClient()
   const open = !!findingId
   // T-38: сообщение о конфликте версий, показываемое вместо молчаливого
@@ -57,6 +59,8 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ['finding', findingId] })
       qc.invalidateQueries({ queryKey: ['findings', runId] })
       qc.invalidateQueries({ queryKey: ['run', runId] })
+      qc.invalidateQueries({ queryKey: ['agg', runId] })
+      onVerdictUpdated?.()
     },
     onError: (err) => {
       if (err instanceof ApiError && err.code === 'version_conflict') {
@@ -212,9 +216,7 @@ export default function FindingDrawer({ findingId, runId, onClose }: Props) {
                 <VerdictCard verdict={f.verdictObj} />
 
                 {conflictMsg && (
-                  <div className="rationale" style={{ marginTop: 10, color: 'var(--high)', background: 'var(--high-bg)', borderColor: 'var(--high)' }}>
-                    {conflictMsg}
-                  </div>
+                  <StatusMessage tone="error" title="Конфликт вердикта" compact>{conflictMsg}</StatusMessage>
                 )}
 
                 <div className="vd-actions-h">Переопределить</div>

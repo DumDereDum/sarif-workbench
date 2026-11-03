@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type RunSummary } from '../api/client'
 import { SEV_ORDER, SEV } from '../lib/severity'
 import { VD_ORDER, VERDICT } from '../lib/verdict'
+import { toggleBaselineSelection } from '../lib/baseline'
 import { groupRunsByTool, sortToolGroups, fmtToolName } from '../lib/toolGroups'
 import { ConfirmModal } from '../components/ConfirmModal'
+import StatusMessage from '../components/StatusMessage'
 
 function SevBar({ counts }: { counts: Partial<Record<string, number>> }) {
   const total = SEV_ORDER.reduce((s, k) => s + (counts[k] ?? 0), 0) || 1
@@ -50,6 +52,7 @@ export default function ProjectRuns() {
     runId: string | null
     runCommit: string
   }>({ isOpen: false, runId: null, runCommit: '' })
+  const [pageNotice, setPageNotice] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['project-runs', projectId],
@@ -62,7 +65,9 @@ export default function ProjectRuns() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-runs', projectId] })
       qc.invalidateQueries({ queryKey: ['projects'] })
+      setPageNotice(null)
     },
+    onError: error => setPageNotice(`Не удалось изменить бейзлайн: ${error.message}`),
   })
 
   const deleteRunMutation = useMutation({
@@ -70,12 +75,12 @@ export default function ProjectRuns() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-runs', projectId] })
       qc.invalidateQueries({ queryKey: ['projects'] })
+      setPageNotice(null)
       setDeleteModal({ isOpen: false, runId: null, runCommit: '' })
     },
     onError: (error) => {
       console.error('Failed to delete run:', error)
-      // Можно добавить toast/уведомление
-      alert(`Ошибка при удалении: ${error.message}`)
+      setPageNotice(`Не удалось удалить прогон: ${error.message}`)
       setDeleteModal({ isOpen: false, runId: null, runCommit: '' })
     }
   })
@@ -114,7 +119,11 @@ export default function ProjectRuns() {
   }
 
   if (error || !data) {
-    return <div className="empty">Ошибка загрузки проекта</div>
+    return (
+      <StatusMessage tone="error" title="Не удалось загрузить историю прогонов">
+        {error ? String(error) : 'Сервер не вернул данные проекта.'}
+      </StatusMessage>
+    )
   }
 
   const { project, runs } = data
@@ -131,6 +140,7 @@ export default function ProjectRuns() {
         <h1>{project.name}</h1>
         <p>{project.repo}{project.team ? ` · ${project.team}` : ''} · история прогонов</p>
       </div>
+      {pageNotice && <StatusMessage tone="error" title="Действие не выполнено">{pageNotice}</StatusMessage>}
 
       <div className="info-strip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -239,21 +249,17 @@ export default function ProjectRuns() {
                       <div className="sevleg muted">{triagePct(cvd)}% размечено</div>
                     </td>
                     <td>
-                      {isBase
-                        ? <span className="base-badge">★ бейзлайн</span>
-                        : (
-                          <button
-                            className="base-btn"
-                            onClick={() => baselineMutation.mutate({ runId: r.id })}
-                            disabled={baselineMutation.isPending}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>
-                            </svg>
-                            задать
-                          </button>
-                        )
-                      }
+                      <button
+                        className={`base-btn${isBase ? ' on' : ''}`}
+                        onClick={() => baselineMutation.mutate({ runId: toggleBaselineSelection(baselineRunId, r.id) })}
+                        disabled={baselineMutation.isPending}
+                        aria-label={isBase ? `Снять бейзлайн с прогона ${r.commit}` : `Задать бейзлайн для прогона ${r.commit}`}
+                      >
+                        <svg viewBox="0 0 24 24" fill={isBase ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>
+                        </svg>
+                        {isBase ? 'бейзлайн' : 'задать'}
+                      </button>
                     </td>
                     <td>
                       <button

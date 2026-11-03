@@ -5,6 +5,7 @@ import { api, type Project } from '../api/client'
 import { SEV_ORDER, SEV, sevStyle } from '../lib/severity'
 import { VD_ORDER, VERDICT, verdictStyle } from '../lib/verdict'
 import { ConfirmModal } from '../components/ConfirmModal'
+import StatusMessage from '../components/StatusMessage'
 
 function SevBar({ counts }: { counts: Partial<Record<string, number>> }) {
   const total = SEV_ORDER.reduce((s, k) => s + (counts[k] ?? 0), 0) || 1
@@ -115,17 +116,19 @@ export default function Projects() {
     projectId: string | null
     projectName: string
   }>({ isOpen: false, projectId: null, projectName: '' })
+  const [pageNotice, setPageNotice] = useState<string | null>(null)
 
   // Мутация удаления проекта
   const deleteProjectMutation = useMutation({
     mutationFn: (projectId: string) => api.deleteProject(projectId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['projects'] })
+      setPageNotice(null)
       setDeleteModal({ isOpen: false, projectId: null, projectName: '' })
     },
     onError: (error) => {
       console.error('Failed to delete project:', error)
-      alert(`Ошибка при удалении проекта: ${error.message}`)
+      setPageNotice(`Не удалось удалить проект: ${error.message}`)
       setDeleteModal({ isOpen: false, projectId: null, projectName: '' })
     }
   })
@@ -164,9 +167,9 @@ export default function Projects() {
 
   if (error) {
     return (
-      <div className="empty">
-        <div>Ошибка загрузки: {String(error)}</div>
-      </div>
+      <StatusMessage tone="error" title="Не удалось загрузить проекты">
+        {String(error)}
+      </StatusMessage>
     )
   }
 
@@ -178,17 +181,10 @@ export default function Projects() {
         <div className="page-h">
           <h1>Проекты</h1>
         </div>
-        <div className="empty">
-          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4">
-            <path d="M14 40c3-13 14-21 26-19" strokeLinecap="round"/>
-            <path d="M16 47c0-9 7-15 16-15 6 0 10 3 13 7"/>
-            <circle cx="33" cy="40" r="1.4" fill="currentColor"/>
-          </svg>
-          <div>Проектов пока нет</div>
-          <div style={{ marginTop: 8, color: 'var(--muted)', fontSize: 12 }}>
-            Загрузите SARIF через <code className="mono">swb-cli enrich</code> и <code className="mono">swb-cli upload</code>
-          </div>
-        </div>
+        {pageNotice && <StatusMessage tone="error" title="Действие не выполнено">{pageNotice}</StatusMessage>}
+        <StatusMessage tone="empty" title="Проектов пока нет">
+          Загрузите SARIF через <code className="mono">swb-cli enrich</code> и <code className="mono">swb-cli upload</code>.
+        </StatusMessage>
       </>
     )
   }
@@ -199,6 +195,7 @@ export default function Projects() {
         <h1>Проекты</h1>
         <p>{projects.length} {projects.length === 1 ? 'проект' : 'проектов'} · последние прогоны SAST · данные загружены через swb-cli</p>
       </div>
+      {pageNotice && <StatusMessage tone="error" title="Действие не выполнено">{pageNotice}</StatusMessage>}
       <div className="grid">
         {projects.map(p => (
           <ProjectCard

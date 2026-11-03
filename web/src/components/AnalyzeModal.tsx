@@ -150,7 +150,7 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
-        throw new Error(err?.message ?? `HTTP ${resp.status}`)
+        throw new Error(err?.detail?.message ?? err?.message ?? `HTTP ${resp.status}`)
       }
 
       const reader = resp.body!.getReader()
@@ -211,6 +211,7 @@ export default function AnalyzeModal({ runId, totalUnmarked, onClose }: AnalyzeM
               }))
               qc.invalidateQueries({ queryKey: ['findings', runId] })
               qc.invalidateQueries({ queryKey: ['run', runId] })
+              qc.invalidateQueries({ queryKey: ['agg', runId] })
               setStep('done')
             }
           } catch (e) {

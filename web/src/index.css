@@ -135,12 +135,19 @@ a { text-decoration: none; }
 
 /* ===== FILTER BAR ===== */
 .filterbar { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--border-2); flex-wrap: wrap; }
+.active-filters { display: flex; flex-basis: 100%; flex-wrap: wrap; gap: 6px; }
+.filter-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: 20px; background: var(--primary-soft); color: var(--primary-700); font-size: 11px; }
+.filter-chip span { font-size: 15px; line-height: 1; }
+.filter-chip:hover { border-color: var(--primary); }
 .search { display: flex; align-items: center; gap: 7px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 180px; }
 .search input { border: none; background: none; outline: none; font-size: 12.5px; width: 100%; color: var(--ink); }
 .search svg { width: 15px; height: 15px; color: var(--faint); }
 .chip-clear { font-size: 11.5px; color: var(--primary); font-weight: 600; padding: 5px 8px; border-radius: 7px; }
 .chip-clear:hover { background: var(--primary-soft); }
 .count-note { font-size: 11.5px; color: var(--muted); }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--border-2); }
+.pagination-actions { display: flex; align-items: center; gap: 8px; }
+.pagination .btn { padding: 5px 10px; }
 
 /* ===== TABLE ===== */
 .tbl-wrap { overflow: auto; max-height: calc(100vh - 380px); }
@@ -150,6 +157,8 @@ thead th:hover { color: var(--muted); }
 tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-2); font-size: 12.5px; vertical-align: middle; }
 tbody tr { cursor: pointer; }
 tbody tr:hover { background: var(--surface-2); }
+.interactive-row { cursor: pointer; }
+.interactive-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .sev-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
 .vd-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
 .rule-cell { display: flex; flex-direction: column; gap: 1px; }
@@ -161,6 +170,15 @@ tbody tr:hover { background: var(--surface-2); }
 .msg { color: var(--ink); max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { padding: 50px; text-align: center; color: var(--faint); }
 .empty svg { width: 42px; height: 42px; color: var(--cyan); opacity: .7; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto; }
+.status-message { margin-bottom: 12px; padding: 20px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); }
+.status-compact { margin-bottom: 0; padding: 10px 12px; }
+.status-title { color: var(--ink); font-weight: 700; }
+.status-description { margin-top: 4px; line-height: 1.5; overflow-wrap: anywhere; }
+.status-error { border-color: #f3c7c9; background: var(--crit-bg); color: var(--crit); }
+.status-error .status-title { color: var(--crit); }
+.status-empty, .status-info { text-align: center; }
+.status-action { margin-top: 10px; color: var(--primary); font-weight: 650; }
+.status-action:hover { text-decoration: underline; }
 
 /* ===== RUNS HISTORY ===== */
 .runs-tbl td { padding: 12px; }

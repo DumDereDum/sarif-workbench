@@ -151,6 +151,27 @@ def test_diff_uses_project_baseline_when_query_param_omitted(client, upload_run)
     assert body["closed"] == []
 
 
+def test_clearing_project_baseline_with_null_disables_project_diff(client, upload_run):
+    repo = _unique_repo()
+    run = upload_run(
+        [{"rule_id": "CWE-89", "uri": "src/a.py", "start_line": 1, "swb_id": _swb_id()}],
+        repo=repo,
+    )
+    project_id = run["project_id"]
+    baseline_url = f"/api/v1/projects/{project_id}/baseline"
+
+    set_resp = client.put(baseline_url, json={"baseline_run_id": run["run_id"]})
+    assert set_resp.status_code == 200, set_resp.text
+
+    clear_resp = client.put(baseline_url, json={"baseline_run_id": None})
+    assert clear_resp.status_code == 200, clear_resp.text
+    assert clear_resp.json() == {"baseline_run_id": None}
+
+    diff_resp = client.get(f"/api/v1/runs/{run['run_id']}/diff")
+    assert diff_resp.status_code == 400, diff_resp.text
+    assert diff_resp.json()["detail"]["error"] == "no_baseline"
+
+
 def test_diff_explicit_baseline_overrides_project_baseline(client, upload_run):
     """Явный query-параметр baseline имеет приоритет над project.baseline_run_id."""
     repo = _unique_repo()

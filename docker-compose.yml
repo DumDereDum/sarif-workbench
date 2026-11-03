@@ -20,7 +20,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: /logs/server.log
     ports:
-      - "8000:8000"
+      - "8000:8080"
     restart: unless-stopped
 
   web:
