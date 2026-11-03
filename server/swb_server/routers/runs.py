@@ -613,13 +613,13 @@ def diff_run(
         )
 
     target = db.query(Finding).filter(Finding.run_id == run_id)
-    baseline = db.query(Finding).filter(Finding.run_id == baseline_run_id)
+    baseline_findings = db.query(Finding).filter(Finding.run_id == baseline_run_id)
     target_identity_ids = db.query(Finding.identity_id).filter(Finding.run_id == run_id)
     baseline_identity_ids = db.query(Finding.identity_id).filter(Finding.run_id == baseline_run_id)
 
     queries = {
         "new": target.filter(~Finding.identity_id.in_(baseline_identity_ids)),
-        "closed": baseline.filter(~Finding.identity_id.in_(target_identity_ids)),
+        "closed": baseline_findings.filter(~Finding.identity_id.in_(target_identity_ids)),
         "unchanged": target.filter(Finding.identity_id.in_(baseline_identity_ids)),
     }
     counts = {name: query.count() for name, query in queries.items()}
