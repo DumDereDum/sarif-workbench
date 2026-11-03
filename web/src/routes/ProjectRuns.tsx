@@ -6,6 +6,7 @@ import { SEV_ORDER, SEV } from '../lib/severity'
 import { VD_ORDER, VERDICT } from '../lib/verdict'
 import { groupRunsByTool, sortToolGroups, fmtToolName } from '../lib/toolGroups'
 import { ConfirmModal } from '../components/ConfirmModal'
+import StatusMessage from '../components/StatusMessage'
 
 function SevBar({ counts }: { counts: Partial<Record<string, number>> }) {
   const total = SEV_ORDER.reduce((s, k) => s + (counts[k] ?? 0), 0) || 1
@@ -50,6 +51,7 @@ export default function ProjectRuns() {
     runId: string | null
     runCommit: string
   }>({ isOpen: false, runId: null, runCommit: '' })
+  const [pageNotice, setPageNotice] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['project-runs', projectId],
@@ -62,7 +64,9 @@ export default function ProjectRuns() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-runs', projectId] })
       qc.invalidateQueries({ queryKey: ['projects'] })
+      setPageNotice(null)
     },
+    onError: error => setPageNotice(`Не удалось изменить бейзлайн: ${error.message}`),
   })
 
   const deleteRunMutation = useMutation({
@@ -70,12 +74,12 @@ export default function ProjectRuns() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-runs', projectId] })
       qc.invalidateQueries({ queryKey: ['projects'] })
+      setPageNotice(null)
       setDeleteModal({ isOpen: false, runId: null, runCommit: '' })
     },
     onError: (error) => {
       console.error('Failed to delete run:', error)
-      // Можно добавить toast/уведомление
-      alert(`Ошибка при удалении: ${error.message}`)
+      setPageNotice(`Не удалось удалить прогон: ${error.message}`)
       setDeleteModal({ isOpen: false, runId: null, runCommit: '' })
     }
   })
@@ -114,7 +118,11 @@ export default function ProjectRuns() {
   }
 
   if (error || !data) {
-    return <div className="empty">Ошибка загрузки проекта</div>
+    return (
+      <StatusMessage tone="error" title="Не удалось загрузить историю прогонов">
+        {error ? String(error) : 'Сервер не вернул данные проекта.'}
+      </StatusMessage>
+    )
   }
 
   const { project, runs } = data
@@ -131,6 +139,7 @@ export default function ProjectRuns() {
         <h1>{project.name}</h1>
         <p>{project.repo}{project.team ? ` · ${project.team}` : ''} · история прогонов</p>
       </div>
+      {pageNotice && <StatusMessage tone="error" title="Действие не выполнено">{pageNotice}</StatusMessage>}
 
       <div className="info-strip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type FindingItem, type AggGroup } from '../api/client'
@@ -7,6 +7,7 @@ import { VD_ORDER, VERDICT, verdictStyle, verdictLabel } from '../lib/verdict'
 import FindingDrawer from '../components/FindingDrawer'
 import AnalyzeModal from '../components/AnalyzeModal'
 import DiffView from '../components/DiffView'
+import StatusMessage from '../components/StatusMessage'
 
 const VIEW_TABS = [
   { key: 'findings', label: 'Находки' },
@@ -51,11 +52,15 @@ export default function RunView() {
   const [sevFilter, setSevFilter] = useState<Set<string>>(new Set())
   const [vdFilter, setVdFilter] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
+  const [page, setPage] = useState(1)
   const [openFid, setOpenFid] = useState<string | null>(null)
+  const [openFindingRunId, setOpenFindingRunId] = useState<string | null>(null)
   const [showAnalyze, setShowAnalyze]   = useState(false)
   const [resetState, setResetState]     = useState<'idle' | 'confirm' | 'loading'>('idle')
   const [pdfLoading, setPdfLoading]     = useState(false)
   const [pdfError, setPdfError]         = useState<string | null>(null)
+  const [resetError, setResetError]     = useState<string | null>(null)
 
   const toggleSev = (s: string) => setSevFilter(prev => {
     const n = new Set(prev)
@@ -68,29 +73,50 @@ export default function RunView() {
     return n
   })
 
-  // Build query params
-  const params: Record<string, string> = { page_size: '500' }
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQ(q.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [q])
+
+  useEffect(() => { setPage(1) }, [sevFilter, vdFilter, aggBy, aggValue, debouncedQ])
+
+  // Keep filtering and pagination on the server so every matching result is reachable.
+  const params: Record<string, string> = { page: String(page), page_size: '100' }
   if (sevFilter.size) params.severity = [...sevFilter].join(',')
   if (vdFilter.size) params.verdict = [...vdFilter].join(',')
-  if (q) params.q = q
+  if (debouncedQ) params.q = debouncedQ
+  if (aggValue !== null) {
+    if (aggBy === 'severity') params.severity = aggValue
+    if (aggBy === 'verdict') params.verdict = aggValue
+    if (aggBy === 'rule') params.rule_id_exact = aggValue
+    if (aggBy === 'file') params.uri_exact = aggValue
+    if (aggBy === 'cwe') params.cwe_key = aggValue
+  }
+
+  // Facet counts respect the other active filters while leaving the current
+  // facet open, so its choices and counts remain useful for changing it.
+  const aggParams: Record<string, string> = {}
+  if (aggBy !== 'severity' && sevFilter.size) aggParams.severity = [...sevFilter].join(',')
+  if (aggBy !== 'verdict' && vdFilter.size) aggParams.verdict = [...vdFilter].join(',')
+  if (debouncedQ) aggParams.q = debouncedQ
 
   const qc = useQueryClient()
 
-  const { data: runData, isLoading: runLoading } = useQuery({
+  const { data: runData, isLoading: runLoading, error: runError } = useQuery({
     queryKey: ['run', runId],
     queryFn: () => api.run(runId!),
     enabled: !!runId,
   })
 
-  const { data: findingsData, isLoading: findingsLoading } = useQuery({
+  const { data: findingsData, isLoading: findingsLoading, isFetching: findingsFetching, error: findingsError } = useQuery({
     queryKey: ['findings', runId, params],
     queryFn: () => api.findings(runId!, params),
     enabled: !!runId,
   })
 
-  const { data: aggData } = useQuery({
-    queryKey: ['agg', runId, aggBy],
-    queryFn: () => api.aggregations(runId!, aggBy),
+  const { data: aggData, error: aggError } = useQuery({
+    queryKey: ['agg', runId, aggBy, aggParams],
+    queryFn: () => api.aggregations(runId!, aggBy, aggParams),
     enabled: !!runId,
   })
 
@@ -104,7 +130,7 @@ export default function RunView() {
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
         console.error('Не удалось скачать PDF-отчёт:', resp.status, err)
-        setPdfError(err.message ?? `Не удалось сгенерировать отчёт (ошибка ${resp.status})`)
+        setPdfError(err?.detail?.message ?? err?.message ?? `Не удалось сгенерировать отчёт (ошибка ${resp.status})`)
         return
       }
       const blob = await resp.blob()
@@ -124,11 +150,14 @@ export default function RunView() {
 
   async function doReset() {
     setResetState('loading')
+    setResetError(null)
     try {
       await api.resetVerdicts(runId!)
       qc.invalidateQueries({ queryKey: ['findings', runId] })
       qc.invalidateQueries({ queryKey: ['run', runId] })
       qc.invalidateQueries({ queryKey: ['agg', runId] })
+    } catch (error) {
+      setResetError(`Не удалось сбросить вердикты: ${String(error)}`)
     } finally {
       setResetState('idle')
     }
@@ -157,24 +186,59 @@ export default function RunView() {
     )
   }
 
-  if (!runData) return <div className="empty">Прогон не найден</div>
+  if (!runData) return (
+    <StatusMessage tone="error" title={runError ? 'Не удалось загрузить прогон' : 'Прогон не найден'}>
+      {runError ? String(runError) : 'Проверьте ссылку или вернитесь к истории прогонов.'}
+    </StatusMessage>
+  )
 
   const counts = runData.counts as Record<string, number> ?? {}
   const cvd = runData.counts_by_verdict as Record<string, number> ?? {}
 
-  const items = findingsData?.items ?? []
-  let displayed = items
+  const displayed = findingsData?.items ?? []
+  const total = findingsData?.total ?? 0
+  const pageSize = findingsData?.page_size ?? 100
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const firstItem = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const lastItem = Math.min(page * pageSize, total)
+  const searchPending = q.trim() !== debouncedQ
 
-  // Filter by aggValue
-  if (aggValue !== null) {
-    displayed = displayed.filter(f => {
-      if (aggBy === 'severity') return f.severity === aggValue
-      if (aggBy === 'verdict') return f.verdict === aggValue
-      if (aggBy === 'rule') return `${f.rule_id} ${f.rule_name ?? ''}`.trim() === aggValue
-      if (aggBy === 'file') return f.uri === aggValue
-      if (aggBy === 'cwe') return (f.cwe ?? f.rule_id) === aggValue
-      return true
-    })
+  const clearAllFilters = () => {
+    setSevFilter(new Set())
+    setVdFilter(new Set())
+    setQ('')
+    setDebouncedQ('')
+    setAggValue(null)
+    setPage(1)
+  }
+
+  const activeFilterLabels = [
+    ...[...sevFilter].map(value => ({ key: `severity:${value}`, label: sevLabel(value), remove: () => setSevFilter(prev => { const next = new Set(prev); next.delete(value); return next }) })),
+    ...[...vdFilter].map(value => ({ key: `verdict:${value}`, label: verdictLabel(value), remove: () => setVdFilter(prev => { const next = new Set(prev); next.delete(value); return next }) })),
+    ...(aggValue !== null ? [{
+      key: `group:${aggBy}:${aggValue}`,
+      label: `${AGG_TABS.find(t => t.key === aggBy)?.label}: ${aggData?.groups.find(g => g.key === aggValue)?.label ?? aggValue}`,
+      remove: () => setAggValue(null),
+    }] : []),
+    ...(q.trim() ? [{ key: 'search', label: `Поиск: ${q.trim()}`, remove: () => { setQ(''); setDebouncedQ('') } }] : []),
+  ]
+
+  const openFinding = (findingId: string, findingRunId = runId!) => {
+    setOpenFindingRunId(findingRunId)
+    setOpenFid(findingId)
+  }
+
+  const toggleAggregate = (key: string) => {
+    setPage(1)
+    if (aggBy === 'severity') {
+      setSevFilter(prev => prev.size === 1 && prev.has(key) ? new Set() : new Set([key]))
+      setAggValue(null)
+    } else if (aggBy === 'verdict') {
+      setVdFilter(prev => prev.size === 1 && prev.has(key) ? new Set() : new Set([key]))
+      setAggValue(null)
+    } else {
+      setAggValue(aggValue === key ? null : key)
+    }
   }
 
   return (
@@ -245,8 +309,9 @@ export default function RunView() {
         </div>
 
         {pdfError && (
-          <div className="form-error" style={{ marginBottom: 8 }}>{pdfError}</div>
+          <StatusMessage tone="error" title="Не удалось скачать PDF">{pdfError}</StatusMessage>
         )}
+        {resetError && <StatusMessage tone="error" title="Сброс не выполнен">{resetError}</StatusMessage>}
 
         <div className="rh-sub">
           {runData.tool && <span>Инструмент: <b>{runData.tool}{runData.tool_version ? ` ${runData.tool_version}` : ''}</b></span>}
@@ -264,7 +329,7 @@ export default function RunView() {
               color={SEV[s].c}
               bg={SEV[s].bg}
               active={sevFilter.has(s)}
-              onClick={() => toggleSev(s)}
+              onClick={() => { toggleSev(s); setPage(1) }}
             />
           ))}
         </div>
@@ -279,7 +344,7 @@ export default function RunView() {
               color={VERDICT[v].c}
               bg={VERDICT[v].bg}
               active={vdFilter.has(v)}
-              onClick={() => toggleVd(v)}
+              onClick={() => { toggleVd(v); setPage(1) }}
             />
           ))}
         </div>
@@ -300,7 +365,11 @@ export default function RunView() {
       </div>
 
       {view === 'diff' && (
-        <DiffView runId={runId!} baselineRunId={runData.baseline_run_id} />
+        <DiffView
+          runId={runId!}
+          baselineRunId={runData.baseline_run_id}
+          onOpenFinding={openFinding}
+        />
       )}
 
       {view === 'findings' && (
@@ -318,13 +387,14 @@ export default function RunView() {
               <button
                 key={t.key}
                 className={`agg-tab${aggBy === t.key ? ' active' : ''}`}
-                onClick={() => { setAggBy(t.key); setAggValue(null) }}
+                onClick={() => { setAggBy(t.key); setAggValue(null); setPage(1) }}
               >
                 {t.label}
               </button>
             ))}
           </div>
           <div className="agg-list">
+            {aggError && <StatusMessage tone="error" title="Не удалось загрузить сводку" compact>{String(aggError)}</StatusMessage>}
             {(aggData?.groups ?? []).map((g: AggGroup) => {
               const label = aggBy === 'severity' ? sevLabel(g.key)
                 : aggBy === 'verdict' ? verdictLabel(g.key)
@@ -332,8 +402,8 @@ export default function RunView() {
               return (
                 <button
                   key={g.key}
-                  className={`agg-row${aggValue === g.key ? ' active' : ''}`}
-                  onClick={() => setAggValue(aggValue === g.key ? null : g.key)}
+                  className={`agg-row${(aggBy === 'severity' ? sevFilter.has(g.key) : aggBy === 'verdict' ? vdFilter.has(g.key) : aggValue === g.key) ? ' active' : ''}`}
+                  onClick={() => toggleAggregate(g.key)}
                 >
                   <AggDot by={aggBy} groupKey={g.key} />
                   <span className="lbl">{label}</span>
@@ -354,18 +424,27 @@ export default function RunView() {
               <input
                 placeholder="Поиск по файлу, правилу, сообщению, функции…"
                 value={q}
-                onChange={e => setQ(e.target.value)}
+                onChange={e => { setQ(e.target.value); setPage(1) }}
               />
             </div>
             <span className="count-note">
-              {findingsLoading ? '…' : `${displayed.length} из ${findingsData?.total ?? 0}`}
+              {findingsFetching || searchPending ? 'Обновление…' : `Показано ${firstItem}–${lastItem} из ${total}`}
             </span>
             <button
               className="chip-clear"
-              onClick={() => { setSevFilter(new Set()); setVdFilter(new Set()); setQ(''); setAggValue(null) }}
+              onClick={clearAllFilters}
             >
-              Сбросить
+              Сбросить всё
             </button>
+            {activeFilterLabels.length > 0 && (
+              <div className="active-filters" aria-label="Активные фильтры">
+                {activeFilterLabels.map(filter => (
+                  <button key={filter.key} className="filter-chip" onClick={filter.remove} title="Убрать фильтр">
+                    {filter.label}<span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="tbl-wrap">
@@ -391,20 +470,22 @@ export default function RunView() {
                     ))}
                   </td></tr>
                 )}
-                {!findingsLoading && displayed.length === 0 && (
+                {findingsError && (
                   <tr><td colSpan={6}>
-                    <div className="empty">
-                      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4">
-                        <path d="M14 40c3-13 14-21 26-19" strokeLinecap="round"/>
-                        <path d="M16 47c0-9 7-15 16-15 6 0 10 3 13 7"/>
-                        <circle cx="33" cy="40" r="1.4" fill="currentColor"/>
-                      </svg>
-                      <div>Нет находок под текущие фильтры</div>
-                    </div>
+                    <StatusMessage tone="error" title="Не удалось загрузить находки" compact>
+                      {String(findingsError)}
+                    </StatusMessage>
                   </td></tr>
                 )}
-                {!findingsLoading && displayed.map((f: FindingItem) => (
-                  <tr key={f.id} onClick={() => setOpenFid(f.id)}>
+                {!findingsLoading && !findingsError && displayed.length === 0 && (
+                  <tr><td colSpan={6}>
+                    <StatusMessage tone="empty" title="Нет находок под текущие фильтры">
+                      Уберите часть фильтров или измените поисковый запрос.
+                    </StatusMessage>
+                  </td></tr>
+                )}
+                {!findingsLoading && !findingsError && displayed.map((f: FindingItem) => (
+                  <tr key={f.id} onClick={() => openFinding(f.id)}>
                     <td>
                       <span className="sev-tag" style={sevStyle(f.severity)}>
                         <span className="dot" style={{ background: SEV[f.severity as keyof typeof SEV]?.c ?? 'var(--note)' }} />
@@ -435,11 +516,29 @@ export default function RunView() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && !findingsError && (
+            <div className="pagination" aria-label="Страницы находок">
+              <span className="muted">Страница {page} из {totalPages}</span>
+              <div className="pagination-actions">
+                <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || findingsFetching || searchPending}>
+                  Назад
+                </button>
+                <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || findingsFetching || searchPending}>
+                  Далее
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       )}
 
-      <FindingDrawer findingId={openFid} runId={runId!} onClose={handleClose} />
+      <FindingDrawer
+        findingId={openFid}
+        runId={openFindingRunId ?? runId!}
+        onClose={handleClose}
+        onVerdictUpdated={() => qc.invalidateQueries({ queryKey: ['diff', runId, runData.baseline_run_id] })}
+      />
 
       {showAnalyze && (
         <AnalyzeModal

@@ -405,8 +405,11 @@ def list_findings(
     severity: str | None = None,
     verdict: str | None = None,
     rule: str | None = None,
+    rule_id_exact: str | None = None,
     cwe: str | None = None,
+    cwe_key: str | None = None,
     file: str | None = None,
+    uri_exact: str | None = None,
     q: str | None = None,
     sort: str = "severity",
     dir: str = "asc",
@@ -431,10 +434,16 @@ def list_findings(
         query = query.filter(FindingIdentity.verdict.in_([v.strip() for v in verdict.split(",")]))
     if rule:
         query = query.filter(Finding.rule_id.contains(rule))
+    if rule_id_exact is not None:
+        query = query.filter(Finding.rule_id == rule_id_exact)
     if cwe:
         query = query.filter(Finding.cwe.contains(cwe))
+    if cwe_key is not None:
+        query = query.filter(func.coalesce(Finding.cwe, Finding.rule_id, "") == cwe_key)
     if file:
         query = query.filter(Finding.uri.contains(file))
+    if uri_exact is not None:
+        query = query.filter(Finding.uri == uri_exact)
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -477,11 +486,34 @@ def list_findings(
 
 
 @router.get("/runs/{run_id}/aggregations")
-def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(get_db)):
+def get_aggregations(
+    run_id: str,
+    by: str = "severity",
+    severity: str | None = None,
+    verdict: str | None = None,
+    q: str | None = None,
+    db: Session = Depends(get_db),
+):
     if not db.query(Run).filter(Run.id == run_id).first():
         raise HTTPException(404, {"error": "not_found", "message": "Run not found"})
 
     base = db.query(Finding).filter(Finding.run_id == run_id)
+    if verdict or by == "verdict":
+        base = base.join(FindingIdentity, Finding.identity_id == FindingIdentity.id)
+    if severity:
+        base = base.filter(Finding.severity.in_([s.strip() for s in severity.split(",")]))
+    if verdict:
+        base = base.filter(
+            FindingIdentity.verdict.in_([v.strip() for v in verdict.split(",")])
+        )
+    if q:
+        like = f"%{q}%"
+        base = base.filter(
+            Finding.uri.like(like)
+            | Finding.rule_id.like(like)
+            | Finding.message.like(like)
+            | Finding.scope.like(like)
+        )
     count_expr = func.count(Finding.id)
     groups: list[dict]
     # аннотация нужна явно: ветки ниже возвращают Row разной формы (2- и
@@ -491,8 +523,7 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
     if by == "verdict":
         key_expr = func.coalesce(FindingIdentity.verdict, "unmarked")
         rows = (
-            base.join(FindingIdentity, Finding.identity_id == FindingIdentity.id)
-            .with_entities(key_expr.label("key"), count_expr.label("count"))
+            base.with_entities(key_expr.label("key"), count_expr.label("count"))
             .group_by(key_expr)
             .all()
         )
@@ -541,7 +572,14 @@ def get_aggregations(run_id: str, by: str = "severity", db: Session = Depends(ge
 
 
 @router.get("/runs/{run_id}/diff")
-def diff_run(run_id: str, baseline: str | None = None, db: Session = Depends(get_db)):
+def diff_run(
+    run_id: str,
+    baseline: str | None = None,
+    category: str | None = None,
+    page: int = 1,
+    page_size: int = 100,
+    db: Session = Depends(get_db),
+):
     """new/closed/unchanged между `run_id` (target) и `baseline`, сравнение по identity (ADR 0001 §6).
 
     `baseline` — id рана-опоры; если не передан, берётся `project.baseline_run_id`
@@ -574,15 +612,48 @@ def diff_run(run_id: str, baseline: str | None = None, db: Session = Depends(get
             },
         )
 
-    target_findings = db.query(Finding).filter(Finding.run_id == run_id).all()
-    baseline_findings = db.query(Finding).filter(Finding.run_id == baseline_run_id).all()
+    target = db.query(Finding).filter(Finding.run_id == run_id)
+    baseline = db.query(Finding).filter(Finding.run_id == baseline_run_id)
+    target_identity_ids = db.query(Finding.identity_id).filter(Finding.run_id == run_id)
+    baseline_identity_ids = db.query(Finding.identity_id).filter(Finding.run_id == baseline_run_id)
 
-    target_identity_ids = {f.identity_id for f in target_findings}
-    baseline_identity_ids = {f.identity_id for f in baseline_findings}
+    queries = {
+        "new": target.filter(~Finding.identity_id.in_(baseline_identity_ids)),
+        "closed": baseline.filter(~Finding.identity_id.in_(target_identity_ids)),
+        "unchanged": target.filter(Finding.identity_id.in_(baseline_identity_ids)),
+    }
+    counts = {name: query.count() for name, query in queries.items()}
 
-    new = [f for f in target_findings if f.identity_id not in baseline_identity_ids]
-    unchanged = [f for f in target_findings if f.identity_id in baseline_identity_ids]
-    closed = [f for f in baseline_findings if f.identity_id not in target_identity_ids]
+    if category is not None and category not in queries:
+        raise HTTPException(400, {"error": "bad_request", "message": "category must be new, closed, or unchanged"})
+
+    if category is not None:
+        page = max(page, 1)
+        page_size = max(1, min(page_size, 500))
+        selected = (
+            queries[category]
+            .order_by(Finding.id.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return {
+            "run_id": run_id,
+            "baseline_run_id": baseline_run_id,
+            "new": [_serialize_finding(f) for f in selected] if category == "new" else [],
+            "closed": [_serialize_finding(f) for f in selected] if category == "closed" else [],
+            "unchanged": [_serialize_finding(f) for f in selected] if category == "unchanged" else [],
+            "counts": counts,
+            "category": category,
+            "total": counts[category],
+            "page": page,
+            "page_size": page_size,
+        }
+
+    # Preserve the original response shape for existing API clients.
+    new = queries["new"].all()
+    closed = queries["closed"].all()
+    unchanged = queries["unchanged"].all()
 
     return {
         "run_id": run_id,
@@ -590,7 +661,7 @@ def diff_run(run_id: str, baseline: str | None = None, db: Session = Depends(get
         "new": [_serialize_finding(f) for f in new],
         "closed": [_serialize_finding(f) for f in closed],
         "unchanged": [_serialize_finding(f) for f in unchanged],
-        "counts": {"new": len(new), "closed": len(closed), "unchanged": len(unchanged)},
+        "counts": counts,
     }
 
 

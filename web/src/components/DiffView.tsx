@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ApiError, api, type DiffCounts, type FindingItem } from '../api/client'
 import { SEV, sevStyle, sevLabel } from '../lib/severity'
 import { verdictStyle, verdictLabel } from '../lib/verdict'
+import StatusMessage from './StatusMessage'
 
 const DIFF_CATEGORIES = [
   { key: 'new' as const,       label: 'Новые',          color: 'var(--new)',  bg: 'var(--new-bg)' },
@@ -21,31 +22,16 @@ const EMPTY_CATEGORY_MSG: Record<DiffCategory, string> = {
 interface DiffViewProps {
   runId: string
   baselineRunId: string | null
+  onOpenFinding: (findingId: string, owningRunId: string) => void
 }
 
-function WarnIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-  )
-}
-
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-      <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>
-    </svg>
-  )
-}
-
-export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
+export default function DiffView({ runId, baselineRunId, onOpenFinding }: DiffViewProps) {
   const [category, setCategory] = useState<DiffCategory>('new')
+  const [page, setPage] = useState(1)
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['diff', runId, baselineRunId],
-    queryFn: () => api.diff(runId),
+  const { data, isLoading, isFetching, error } = useQuery({
+    queryKey: ['diff', runId, baselineRunId, category, page],
+    queryFn: () => api.diff(runId, baselineRunId ?? undefined, { category, page: String(page), page_size: '100' }),
     enabled: !!runId && !!baselineRunId,
     retry: false,
   })
@@ -53,10 +39,9 @@ export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
   if (!baselineRunId) {
     return (
       <div className="panel">
-        <div className="empty">
-          <StarIcon />
-          <div>Бейзлайн не задан. Отметьте звёздочкой ран-эталон в истории прогонов, чтобы включить сравнение.</div>
-        </div>
+        <StatusMessage tone="info" title="Бейзлайн не задан">
+          Отметьте звёздочкой ран-эталон в истории прогонов, чтобы включить сравнение.
+        </StatusMessage>
       </div>
     )
   }
@@ -91,10 +76,7 @@ export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
     }
     return (
       <div className="panel">
-        <div className="empty">
-          <WarnIcon />
-          <div>{msg}</div>
-        </div>
+        <StatusMessage tone="error" title="Не удалось загрузить сравнение">{msg}</StatusMessage>
       </div>
     )
   }
@@ -103,6 +85,11 @@ export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
 
   const counts = data.counts as DiffCounts
   const items = data[category]
+  const total = data.total ?? counts[category]
+  const pageSize = data.page_size ?? 100
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const firstItem = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const lastItem = Math.min(page * pageSize, total)
 
   return (
     <div className="panel">
@@ -118,7 +105,7 @@ export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
             key={c.key}
             className={`sev-chip${category === c.key ? ' active' : ''}`}
             style={{ color: c.color, background: c.bg }}
-            onClick={() => setCategory(c.key)}
+            onClick={() => { setCategory(c.key); setPage(1) }}
           >
             <span className="n">{counts[c.key] ?? 0}</span> {c.label}
           </button>
@@ -140,18 +127,22 @@ export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
           <tbody>
             {items.length === 0 && (
               <tr><td colSpan={6}>
-                <div className="empty">
-                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4">
-                    <path d="M14 40c3-13 14-21 26-19" strokeLinecap="round"/>
-                    <path d="M16 47c0-9 7-15 16-15 6 0 10 3 13 7"/>
-                    <circle cx="33" cy="40" r="1.4" fill="currentColor"/>
-                  </svg>
-                  <div>{EMPTY_CATEGORY_MSG[category]}</div>
-                </div>
+                <StatusMessage tone="empty" title={EMPTY_CATEGORY_MSG[category]} />
               </td></tr>
             )}
             {items.map((f: FindingItem) => (
-              <tr key={f.id} style={{ cursor: 'default' }}>
+              <tr
+                key={f.id}
+                className="interactive-row"
+                tabIndex={0}
+                onClick={() => onOpenFinding(f.id, category === 'closed' ? data.baseline_run_id : runId)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onOpenFinding(f.id, category === 'closed' ? data.baseline_run_id : runId)
+                  }
+                }}
+              >
                 <td>
                   <span className="sev-tag" style={sevStyle(f.severity)}>
                     <span className="dot" style={{ background: SEV[f.severity as keyof typeof SEV]?.c ?? 'var(--note)' }} />
@@ -182,6 +173,20 @@ export default function DiffView({ runId, baselineRunId }: DiffViewProps) {
           </tbody>
         </table>
       </div>
+      {totalPages > 1 && (
+        <div className="pagination" aria-label="Страницы сравнения">
+          <span className="muted">Показано {firstItem}–{lastItem} из {total}</span>
+          <div className="pagination-actions">
+            <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || isFetching}>
+              Назад
+            </button>
+            <span className="muted">Страница {page} из {totalPages}</span>
+            <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || isFetching}>
+              Далее
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
