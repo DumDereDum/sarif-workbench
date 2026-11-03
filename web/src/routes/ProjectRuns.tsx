@@ -248,21 +248,17 @@ export default function ProjectRuns() {
                       <div className="sevleg muted">{triagePct(cvd)}% размечено</div>
                     </td>
                     <td>
-                      {isBase
-                        ? <span className="base-badge">★ бейзлайн</span>
-                        : (
-                          <button
-                            className="base-btn"
-                            onClick={() => baselineMutation.mutate({ runId: r.id })}
-                            disabled={baselineMutation.isPending}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>
-                            </svg>
-                            задать
-                          </button>
-                        )
-                      }
+                      <button
+                        className={`base-btn${isBase ? ' on' : ''}`}
+                        onClick={() => baselineMutation.mutate({ runId: isBase ? null : r.id })}
+                        disabled={baselineMutation.isPending}
+                        aria-label={isBase ? `Снять бейзлайн с прогона ${r.commit}` : `Задать бейзлайн для прогона ${r.commit}`}
+                      >
+                        <svg viewBox="0 0 24 24" fill={isBase ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>
+                        </svg>
+                        {isBase ? 'бейзлайн' : 'задать'}
+                      </button>
                     </td>
                     <td>
                       <button
