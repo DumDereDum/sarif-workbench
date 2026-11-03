@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type RunSummary } from '../api/client'
 import { SEV_ORDER, SEV } from '../lib/severity'
 import { VD_ORDER, VERDICT } from '../lib/verdict'
+import { toggleBaselineSelection } from '../lib/baseline'
 import { groupRunsByTool, sortToolGroups, fmtToolName } from '../lib/toolGroups'
 import { ConfirmModal } from '../components/ConfirmModal'
 import StatusMessage from '../components/StatusMessage'
@@ -250,7 +251,7 @@ export default function ProjectRuns() {
                     <td>
                       <button
                         className={`base-btn${isBase ? ' on' : ''}`}
-                        onClick={() => baselineMutation.mutate({ runId: isBase ? null : r.id })}
+                        onClick={() => baselineMutation.mutate({ runId: toggleBaselineSelection(baselineRunId, r.id) })}
                         disabled={baselineMutation.isPending}
                         aria-label={isBase ? `Снять бейзлайн с прогона ${r.commit}` : `Задать бейзлайн для прогона ${r.commit}`}
                       >
